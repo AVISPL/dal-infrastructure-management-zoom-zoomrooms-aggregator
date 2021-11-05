@@ -294,15 +294,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             room.getControllableProperties().addAll(settingsControls);
             JsonNode devices = retrieveRoomDevices(roomId);
             if(devices != null && devices.isArray()) {
-                int i = 0;
                 for(JsonNode deviceNode: devices) {
-                    i++;
                     Map<String, String> properties = new HashMap<>();
                     aggregatedDeviceProcessor.applyProperties(properties, deviceNode, "RoomDevice");
                     // TODO add properties to aggregated device
 
                     for(Map.Entry<String, String> entry: properties.entrySet()){
-                        room.getProperties().put(String.format("RoomDevice_%s:%s", i, entry.getKey()), entry.getValue());
+                        room.getProperties().put(String.format("RoomDevice_%s_%s", properties.get("Info#ID"), entry.getKey()), entry.getValue());
                     }
                 }
             }
