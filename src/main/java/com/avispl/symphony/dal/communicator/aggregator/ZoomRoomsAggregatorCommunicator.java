@@ -107,12 +107,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     public void controlProperty(ControllableProperty controllableProperty) throws Exception {
         String roomId = controllableProperty.getDeviceId();
         String property = controllableProperty.getProperty();
+        Object value = controllableProperty.getValue();
 
         if(!StringUtils.isNullOrEmpty(roomId) && !StringUtils.isNullOrEmpty(property)){
             if(property.startsWith("RoomSettings#")) {
                 String setting = ZoomRoomsSetting.valueOf(property.split("#")[1]).name();
-                String value = "0".equals(property) ? "false" : "true";
-                updateRoomSetting(roomId, setting, value, ""); // TODO specify setting type
+                String settingValue = "0".equals(value) ? "false" : "true";
+                updateRoomSetting(roomId, setting, settingValue, "meeting");
                 return;
             } else {
                 switch (property) {
@@ -395,7 +396,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         Map<String, String> patch = new HashMap<>();
         patch.put(setting, value);
         request.put("zoom_rooms", patch);
-        doPatch(String.format(ZOOM_ROOM_SETTINGS_URL, roomId) + "?setting_type=meeting", request, String.class);
+        doPatch(String.format(ZOOM_ROOM_SETTINGS_URL, roomId) + "?setting_type=" + type, request, String.class);
     }
 
     /**
