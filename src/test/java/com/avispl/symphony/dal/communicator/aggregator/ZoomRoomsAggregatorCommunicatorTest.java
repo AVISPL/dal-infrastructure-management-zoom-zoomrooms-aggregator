@@ -21,8 +21,8 @@ public class ZoomRoomsAggregatorCommunicatorTest {
         mockAggregatorCommunicator = new ZoomRoomsAggregatorCommunicator();
         mockAggregatorCommunicator.setPassword("***REMOVED***");
         mockAggregatorCommunicator.setHost("api.zoom.us");
-        mockAggregatorCommunicator.setProtocol("http");
-        mockAggregatorCommunicator.setPort(80);
+        mockAggregatorCommunicator.setProtocol("https");
+        mockAggregatorCommunicator.setPort(443);
         mockAggregatorCommunicator.internalInit();
         mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.authenticate();

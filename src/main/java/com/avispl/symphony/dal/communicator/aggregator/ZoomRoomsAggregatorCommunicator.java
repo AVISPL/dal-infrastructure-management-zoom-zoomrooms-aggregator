@@ -395,8 +395,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         Map<String, String> patch = new HashMap<>();
         patch.put(setting, value);
         request.put("zoom_rooms", patch);
-        String response = doPatch(String.format(ZOOM_ROOM_SETTINGS_URL, roomId) + "?setting_type=meeting", request, String.class);
-        response.trim();
+        doPatch(String.format(ZOOM_ROOM_SETTINGS_URL, roomId) + "?setting_type=meeting", request, String.class);
     }
 
     /**
