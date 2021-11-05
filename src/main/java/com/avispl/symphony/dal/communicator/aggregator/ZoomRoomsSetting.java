@@ -1,6 +1,17 @@
-package com.avispl.symphony.dal.communicator.aggregator.mock;
+/*
+ * Copyright (c) 2021 AVI-SPL, Inc. All Rights Reserved.
+ */
+package com.avispl.symphony.dal.communicator.aggregator;
 
-public enum ZoomRoomsSettings {
+/**
+ * Zoom Rooms account and rooms properties are formatted and normalized to fit PascalCase format.
+ * When such control is triggered - adapter receives a formatted name, and it needs to receive the original value
+ * in order of being able to send API request. This class contains all the data necessary.
+ *
+ * @author Maksym.Rossiytsev
+ * @since 1.0.0
+ */
+public enum ZoomRoomsSetting {
     UpcomingMeetingAlert("upcoming_meeting_alert"),
     ShowAlertBeforeMeeting("show_alert_before_meeting"),
     StartAirplayMirroring("start_airplay_mirroring"),
@@ -26,17 +37,29 @@ public enum ZoomRoomsSettings {
     CountAttendeesNumberInRoom("count_attendees_number_in_room"),
     SendWhiteboardToInternalContactOnly("send_whiteboard_to_internal_contact_only");
 
+    /* Stored name of the property, to use for control commands */
     private final String name;
 
-    private ZoomRoomsSettings(String s) {
+    private ZoomRoomsSetting(String s) {
         name = s;
     }
 
-    public boolean equalsName(String otherName) {
-        // (otherName == null) check is not needed because name.equals(null) returns false
-        return name.equals(otherName);
+    /**
+     * Check if the name is equal to the parameter value
+     *
+     * @param externalName name to compare current name with
+     * @return boolean value, indicating whether values are equal or not
+     */
+    public boolean equalsName(String externalName) {
+        // (externalName == null) check is not needed because name.equals(null) returns false
+        return name.equals(externalName);
     }
 
+    /**
+     * String value of the current ZoomRoomsSetting.
+     *
+     * @return name of the setting.
+     */
     public String toString() {
         return this.name;
     }
