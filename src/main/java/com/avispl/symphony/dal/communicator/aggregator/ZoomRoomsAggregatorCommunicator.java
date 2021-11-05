@@ -109,8 +109,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         String property = controllableProperty.getProperty();
         Object value = controllableProperty.getValue();
 
-        if(!StringUtils.isNullOrEmpty(roomId) && !StringUtils.isNullOrEmpty(property)){
-            if(property.startsWith("RoomSettings#")) {
+        if (!StringUtils.isNullOrEmpty(roomId) && !StringUtils.isNullOrEmpty(property)) {
+            if (property.startsWith("RoomSettings#")) {
                 String setting = ZoomRoomsSetting.valueOf(property.split("#")[1]).name();
                 String settingValue = "0".equals(value) ? "false" : "true";
                 updateRoomSetting(roomId, setting, settingValue, "meeting");
@@ -174,7 +174,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     public int ping() throws Exception {
-        if(isInitialized()) {
+        if (isInitialized()) {
             long pingResultTotal = 0L;
 
             for (int i = 0; i < this.getPingAttempts(); i++) {
@@ -272,14 +272,16 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private void retrieveRoomDevicesProperties(List<AggregatedDevice> rooms) throws Exception {
         JsonNode roomMetrics = retrieveZoomRoomMetrics();
         Map<String, Map<String, String>> roomMetricsProperties = new HashMap<>();
-        for(JsonNode roomMetric: roomMetrics) {
-            HashMap<String, String> roomProperties = new HashMap<>();
-            aggregatedDeviceProcessor.applyProperties(roomProperties, roomMetric, "ZoomRoomMetrics");
-            roomMetricsProperties.put(roomProperties.get("id"), roomProperties);
+        if (roomMetrics != null && roomMetrics.isArray()) {
+            for (JsonNode roomMetric: roomMetrics) {
+                HashMap<String, String> roomProperties = new HashMap<>();
+                aggregatedDeviceProcessor.applyProperties(roomProperties, roomMetric, "ZoomRoomMetrics");
+                roomMetricsProperties.put(roomProperties.get("id"), roomProperties);
+            }
         }
 
         Long currentTime = new Date().getTime();
-        for(AggregatedDevice room: rooms) {
+        for (AggregatedDevice room : rooms) {
             String roomId = room.getDeviceId();
             room.getProperties().putAll(roomMetricsProperties.get(roomId));
 
@@ -294,19 +296,19 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             room.getProperties().putAll(settingsProperties);
             room.getControllableProperties().addAll(settingsControls);
             JsonNode devices = retrieveRoomDevices(roomId);
-            if(devices != null && devices.isArray()) {
-                for(JsonNode deviceNode: devices) {
+            if (devices != null && devices.isArray()) {
+                for (JsonNode deviceNode : devices) {
                     Map<String, String> properties = new HashMap<>();
                     aggregatedDeviceProcessor.applyProperties(properties, deviceNode, "RoomDevice");
                     // TODO add properties to aggregated device
 
-                    for(Map.Entry<String, String> entry: properties.entrySet()){
+                    for (Map.Entry<String, String> entry : properties.entrySet()) {
                         room.getProperties().put(String.format("RoomDevice_%s_%s", properties.get("Info#ID"), entry.getKey()), entry.getValue());
                     }
                 }
             }
 
-            if(room.getProperties().get("Metrics#RoomStatus").equals("InMeeting")) {
+            if (room.getProperties().get("Metrics#RoomStatus").equals("InMeeting")) {
                 room.getProperties().put("RoomControls#EndCurrentMeeting", "");
                 room.getControllableProperties().add(createButton("RoomControls#EndCurrentMeeting", "End", "Ending...", 0L));
 
@@ -314,7 +316,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 room.getControllableProperties().add(createButton("RoomControls#LeaveCurrentMeeting", "Leave", "Leaving...", 0L));
             }
 
-            if(!room.getProperties().get("Metrics#RoomStatus").equals("Offline")) {
+            if (!room.getProperties().get("Metrics#RoomStatus").equals("Offline")) {
                 room.getProperties().put("RoomControls#RestartZoomRoomsClient", "");
                 room.getControllableProperties().add(createButton("RoomControls#RestartZoomRoomsClient", "Restart", "Restarting...", 0L));
             }
@@ -328,7 +330,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private JsonNode retrieveRoomDevices(String roomId) throws Exception {
         JsonNode roomDevices = doGet(String.format(ZOOM_DEVICES_URL, roomId), JsonNode.class);
-        if(roomDevices != null && roomDevices.has("devices")) {
+        if (roomDevices != null && roomDevices.has("devices")) {
             return roomDevices.get("devices");
         }
         return null;
@@ -339,8 +341,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private JsonNode retrieveZoomRoomMetrics() throws Exception {
         JsonNode roomsMetrics = doGet(ZOOM_ROOM_METRICS, JsonNode.class);
-        if(roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("zoom_rooms"))
-        {
+        if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("zoom_rooms")) {
             return roomsMetrics.get("zoom_rooms");
         }
         return null;
