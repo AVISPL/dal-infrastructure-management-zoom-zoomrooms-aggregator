@@ -1,4 +1,4 @@
-package com.avispl.symphony.dal.communicator.aggregator.mock;
+package com.avispl.symphony.dal.communicator.aggregator;
 
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;

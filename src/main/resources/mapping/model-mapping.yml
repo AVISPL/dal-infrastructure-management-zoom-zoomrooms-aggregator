@@ -15,20 +15,15 @@ models:
         deviceModel: Zoom Room
         deviceOnline: get("status").asText().equals("Offline") != true
 #      dynamicStatistics:
-      properties:
-        RoomStatus: get("status")
-        RoomId: get("room_id")
   - model:
       name: RoomDevice
       filter: get("room_id") == null
       properties:
-        RoomDeviceInfo#DeviceType: get("device_type")
-        RoomDeviceInfo#AppVersion: get("app_version")
-        RoomDeviceInfo#DeviceSystem: get("device_system")
-        RoomDeviceInfo#DeviceStatus: get("status")
-        RoomDeviceInfo#RoomName: get("room_name")
-        RoomDeviceInfo#id: get("id")
-        RoomDeviceInfo#RoomId: get("room_id")
+        DeviceInfo#DeviceType: get("device_type")
+        DeviceInfo#AppVersion: get("app_version")
+        DeviceInfo#DeviceSystem: get("device_system")
+        DeviceInfo#DeviceStatus: get("status")
+        DeviceInfo#ID: get("id")
   - model:
       name: ZoomRoomMetrics
       filter: get("id") != null && get("device_ip") != null
@@ -37,7 +32,7 @@ models:
         Metrics#CalendarName: get("calendar_name")
         Metrics#Email: get("email")
         Metrics#AccountType: get("account_type")
-        Metrics#Status: get("status")
+        Metrics#RoomStatus: get("status")
         Metrics#DeviceIp: get("device_ip")
         Metrics#Camera: get("camera")
         Metrics#Microphone: get("microphone")
