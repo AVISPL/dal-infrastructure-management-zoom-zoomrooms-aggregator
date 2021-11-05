@@ -19,11 +19,11 @@ models:
       name: RoomDevice
       filter: get("room_id") == null
       properties:
-        DeviceInfo#DeviceType: get("device_type")
-        DeviceInfo#AppVersion: get("app_version")
-        DeviceInfo#DeviceSystem: get("device_system")
-        DeviceInfo#DeviceStatus: get("status")
-        DeviceInfo#ID: get("id")
+        Info#DeviceType: get("device_type")
+        Info#AppVersion: get("app_version")
+        Info#DeviceSystem: get("device_system")
+        Info#DeviceStatus: get("status")
+        Info#ID: get("id")
   - model:
       name: ZoomRoomMetrics
       filter: get("id") != null && get("device_ip") != null
