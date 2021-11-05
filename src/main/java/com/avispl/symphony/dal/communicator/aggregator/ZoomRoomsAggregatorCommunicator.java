@@ -115,6 +115,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 String settingValue = "0".equals(value) ? "false" : "true";
                 updateRoomSetting(roomId, setting, settingValue, "meeting");
                 return;
+            } else if (property.startsWith("AccountSettings#")) {
+                String setting = ZoomRoomsSetting.valueOf(property.split("#")[1]).name();
+                String settingValue = "0".equals(value) ? "false" : "true";
+                updateAccountSettings(setting, settingValue, "meeting");
+                return;
             } else {
                 switch (property) {
                     case "RoomControls#LeaveCurrentMeeting":
@@ -386,7 +391,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      *
      */
-    private void updateAccountSettings(String setting, String value) {
+    private void updateAccountSettings(String setting, String value, String type) throws Exception {
+        Map<String, Map<String, String>> request = new HashMap<>();
+        Map<String, String> patch = new HashMap<>();
+        patch.put(setting, value);
+        request.put("zoom_rooms", patch);
+        doPatch(ZOOM_ROOM_ACCOUNT_SETTINGS_URL + "?setting_type=" + type, request, String.class);
     }
 
     /**
