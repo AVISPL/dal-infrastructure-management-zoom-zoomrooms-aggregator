@@ -233,8 +233,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     puSocketConnection.setSoTimeout(this.getPingTimeout());
 
                     if (puSocketConnection.isConnected()) {
-                        long endTime = System.currentTimeMillis();
-                        long pingResult = endTime - startTime;
+                        long pingResult = System.currentTimeMillis() - startTime;
                         pingResultTotal += pingResult;
                         if (this.logger.isTraceEnabled()) {
                             this.logger.trace(String.format("PING OK: Attempt #%s to connect to %s on port %s succeeded in %s ms", i + 1, this.getHost(), this.getPort(), pingResult));
