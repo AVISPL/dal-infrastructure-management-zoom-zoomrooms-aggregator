@@ -50,7 +50,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     @Test
     public void controlRoomSettingTest() throws Exception {
         String roomId = "KJmeDJOMQDmh3gczMXCxFQ";
-        String property = "RoomSettings#UpcomingMeetingAlert";
+        String property = "RoomMeetingSettings#UpcomingMeetingAlert";
         ControllableProperty controllableProperty = new ControllableProperty();
         controllableProperty.setProperty(property);
         controllableProperty.setValue(0);
@@ -68,6 +68,6 @@ public class ZoomRoomsAggregatorCommunicatorTest {
                 .getControllableProperties().stream().filter(advancedControllableProperty ->
                         advancedControllableProperty.getName().equals(property)).findFirst().get();
 
-        Assert.assertFalse((Boolean) endControl.getValue());
+        Assert.assertFalse((Boolean.parseBoolean(String.valueOf(endControl.getValue()))));
     }
 }

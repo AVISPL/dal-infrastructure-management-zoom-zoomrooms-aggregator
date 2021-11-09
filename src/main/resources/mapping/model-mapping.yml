@@ -8,7 +8,7 @@ models:
         deviceType: Infrastructure
         type: Infrastructure
         category: Management
-        serialNumber: get("room_id")
+        serialNumber: get("id")
         deviceId: get("room_id")
         deviceName: get("name")
         deviceMake: Zoom
@@ -28,12 +28,11 @@ models:
       name: ZoomRoomMetrics
       filter: get("id") != null && get("device_ip") != null
       properties:
-        id: get("id")
         Metrics#CalendarName: get("calendar_name")
         Metrics#Email: get("email")
         Metrics#AccountType: get("account_type")
         Metrics#RoomStatus: get("status")
-        Metrics#DeviceIp: get("device_ip")
+        Metrics#DeviceIp: get("device_ip")?.asText()
         Metrics#Camera: get("camera")
         Metrics#Microphone: get("microphone")
         Metrics#Speaker: get("speaker")
@@ -41,382 +40,557 @@ models:
         Metrics#Health: get("health")
         Metrics#Issues: get("issues")
   - model:
-      name: AccountSettingsTMP
+      name: AccountAlertSettings
       filter: get("room_id") == null
       statistics:
-        AccountSettings#detectMicrophoneErrorAlert: ''
-        AccountSettings#detectBluetoothMicrohponeErrorAlert: ''
-        AccountSettings#detectSpeakerErrorAlert: ''
-        AccountSettings#detectBluetoothSpeakerErrorAlert: ''
-        AccountSettings#detectCameraErrorAlert: ''
-        AccountSettings#audioNotMeetUsabilityThreshold: ''
-        AccountSettings#batteryLowAndNotCharging: ''
-        AccountSettings#controllerSchedulingDisconnected: ''
-        AccountSettings#cpuUsageHighDetected: ''
-        AccountSettings#networkUnstableDetected: ''
-        AccountSettings#zoomRoomOffline: ''
-        AccountSettings#sipRegistrationFailed: ''
-        AccountSettings#micSpeakerCameraDisconnected: ''
-        AccountSettings#zoomRoomDisplayDisconnected: ''
+        RoomControlsAlertSettings#DetectMicrophoneErrorAlert: 'false'
+        RoomControlsAlertSettings#DetectBluetoothMicrohponeErrorAlert: 'false'
+        RoomControlsAlertSettings#DetectSpeakerErrorAlert: 'false'
+        RoomControlsAlertSettings#DetectBluetoothSpeakerErrorAlert: 'false'
+        RoomControlsAlertSettings#DetectCameraErrorAlert: 'false'
+        RoomControlsAlertSettings#AudioNotMeetUsabilityThreshold: 'false'
+        RoomControlsAlertSettings#AudioMeetUsabilityThreshold: 'false'
+        RoomControlsAlertSettings#BatteryLowAndNotCharging: 'false'
+        RoomControlsAlertSettings#BatteryIsCharging: 'false'
+#        RoomControlsAlertSettings#BatteryPercentage: '0'
+        RoomControlsAlertSettings#ControllerSchedulingDisconnected: 'false'
+        RoomControlsAlertSettings#ControllerSchedulingReconnected: 'false'
+        RoomControlsAlertSettings#CpuUsageHighDetected: 'false'
+        RoomControlsAlertSettings#NetworkUnstableDetected: 'false'
+        RoomControlsAlertSettings#ZoomRoomOffline: 'false'
+        RoomControlsAlertSettings#ZoomRoomComeBackOnline: 'false'
+        RoomControlsAlertSettings#SipRegistrationFailed: 'false'
+        RoomControlsAlertSettings#SipRegistrationReEnabled: 'false'
+        RoomControlsAlertSettings#MicSpeakerCameraDisconnected: 'false'
+        RoomControlsAlertSettings#MicSpeakerCameraReconnected: 'false'
+        RoomControlsAlertSettings#ZoomRoomDisplayDisconnected: 'false'
       control:
-        AccountSettings#detectMicrophoneErrorAlert:
+        RoomControlsAlertSettings#DetectMicrophoneErrorAlert:
           type: Switch
-          value: get("client_alert").get("detect_microphone_error_alert").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#detectBluetoothMicrohponeErrorAlert:
+          value: get("client_alert").get("detect_microphone_error_alert")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#DetectBluetoothMicrohponeErrorAlert:
           type: Switch
-          value: get("client_alert").get("detect_bluetooth_microphone_error_alert").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#detectSpeakerErrorAlert:
+          value: get("client_alert").get("detect_bluetooth_microphone_error_alert")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#DetectSpeakerErrorAlert:
           type: Switch
-          value: get("client_alert").get("detect_speaker_error_alert").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#detectBluetoothSpeakerErrorAlert:
+          value: get("client_alert").get("detect_speaker_error_alert")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#DetectBluetoothSpeakerErrorAlert:
           type: Switch
-          value: get("client_alert").get("detect_bluetooth_speaker_error_alert").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#detectCameraErrorAlert:
+          value: get("client_alert").get("detect_bluetooth_speaker_error_alert")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#DetectCameraErrorAlert:
           type: Switch
-          value: get("client_alert").get("detect_camera_error_alert").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#audioNotMeetUsabilityThreshold:
+          value: get("client_alert").get("detect_camera_error_alert")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#AudioNotMeetUsabilityThreshold:
           type: Switch
-          value: get("client_alert").get("audio_not_meet_usability_threshold").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#batteryLowAndNotCharging:
+          value: get("notification").get("audio_not_meet_usability_threshold")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#AudioMeetUsabilityThreshold:
           type: Switch
-          value: get("client_alert").get("battery_low_and_not_charging").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#controllerSchedulingDisconnected:
+          value: get("notification").get("audio_meet_usability_threshold")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#BatteryLowAndNotCharging:
           type: Switch
-          value: get("client_alert").get("controller_scheduling_disconnected").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#cpuUsageHighDetected:
+          value: get("notification").get("battery_low_and_not_charging")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#BatteryIsCharging:
           type: Switch
-          value: get("client_alert").get("cpu_usage_high_detected").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#networkUnstableDetected:
+          value: get("notification").get("battery_is_charging")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+#        RoomControlsAlertSettings#BatteryPercentage:
+#          type: Numeric
+#          value: get("notification").get("battery_percentage")?.asInt()
+        RoomControlsAlertSettings#ControllerSchedulingDisconnected:
           type: Switch
-          value: get("client_alert").get("network_unstable_detected").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#zoomRoomOffline:
+          value: get("notification").get("controller_scheduling_disconnected")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#ControllerSchedulingReconnected:
           type: Switch
-          value: get("client_alert").get("zoom_room_offline").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#sipRegistrationFailed:
+          value: get("notification").get("controller_scheduling_reconnected")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#CpuUsageHighDetected:
           type: Switch
-          value: get("client_alert").get("sip_registration_failed").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#micSpeakerCameraDisconnected:
+          value: get("notification").get("cpu_usage_high_detected")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#NetworkUnstableDetected:
           type: Switch
-          value: get("client_alert").get("mic_speaker_camera_disconnected").asText()
-          labelOn: On
-          labelOff: Off
-        AccountSettings#zoomRoomDisplayDisconnected:
+          value: get("notification").get("network_unstable_detected")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#ZoomRoomOffline:
           type: Switch
-          value: get("client_alert").get("zoom_room_display_disconnected").asText()
-          labelOn: On
-          labelOff: Off
+          value: get("notification").get("zoom_room_offline")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#ZoomRoomComeBackOnline:
+          type: Switch
+          value: get("notification").get("zoom_room_come_back_online")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#SipRegistrationFailed:
+          type: Switch
+          value: get("notification").get("sip_registration_failed")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#SipRegistrationReEnabled:
+          type: Switch
+          value: get("notification").get("sip_registration_re_enabled")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#MicSpeakerCameraDisconnected:
+          type: Switch
+          value: get("notification").get("mic_speaker_camera_disconnected")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#MicSpeakerCameraReconnected:
+          type: Switch
+          value: get("notification").get("mic_speaker_camera_reconnected")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        RoomControlsAlertSettings#ZoomRoomDisplayDisconnected:
+          type: Switch
+          value: get("notification").get("zoom_room_display_disconnected")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
   - model:
-      name: AccountSettings
+      name: RoomAlertSettings
       filter: get("room_id") == null
       statistics:
-        AccountSettings#UpcomingMeetingAlert: 'false'
-        AccountSettings#ShowAlertBeforeMeeting: 'false'
-        AccountSettings#StartAirplayMirroring: 'false'
-        AccountSettings#StartAirplayManually: 'false'
-        AccountSettings#WeeklySystemRestart: 'false'
-        AccountSettings#DisplayMeetingList: 'false'
-        AccountSettings#DisplayTopBanner: 'false'
-        AccountSettings#DisplayFeedbackSurvey: 'false'
-        AccountSettings#AutoDirectSharing: 'false'
-        AccountSettings#TransformMeetingToPrivate: 'false'
-        AccountSettings#HideIDForPrivateMeeting: 'false'
-        AccountSettings#AutoStartScheduledMeeting: 'false'
-        AccountSettings#AutoStopScheduledMeeting: 'false'
-        AccountSettings#AudioDeviceDailyAutoTest: 'false'
-        AccountSettings#SupportJoin3rdPartyMeeting: 'false'
-        AccountSettings#SecureConnectionChannel: 'false'
-        AccountSettings#MakeRoomAlternativeHost: 'false'
-        AccountSettings#EncryptSharedScreenContent: 'false'
-        AccountSettings#AllowMultipleContentSharing: 'false'
-        AccountSettings#ShowNonVideoParticipants: 'false'
-        AccountSettings#ShowCallHistoryInRoom: 'false'
-        AccountSettings#ShowContactListOnController: 'false'
-        AccountSettings#CountAttendeesNumberInRoom: 'false'
-        AccountSettings#SendWhiteboardToInternalContactOnly: 'false'
+        RoomControlsAlertSettings#DetectMicrophoneErrorAlert: 'false'
+        RoomControlsAlertSettings#DetectBluetoothMicrohponeErrorAlert: 'false'
+        RoomControlsAlertSettings#DetectSpeakerErrorAlert: 'false'
+        RoomControlsAlertSettings#DetectBluetoothSpeakerErrorAlert: 'false'
+        RoomControlsAlertSettings#DetectCameraErrorAlert: 'false'
+        RoomControlsAlertSettings#AudioNotMeetUsabilityThreshold: 'false'
+        RoomControlsAlertSettings#AudioMeetUsabilityThreshold: 'false'
+        RoomControlsAlertSettings#BatteryLowAndNotCharging: 'false'
+        RoomControlsAlertSettings#BatteryIsCharging: 'false'
+#        RoomControlsAlertSettings#BatteryPercentage: '0'
+        RoomControlsAlertSettings#ControllerSchedulingDisconnected: 'false'
+        RoomControlsAlertSettings#ControllerSchedulingReconnected: 'false'
+        RoomControlsAlertSettings#CpuUsageHighDetected: 'false'
+        RoomControlsAlertSettings#NetworkUnstableDetected: 'false'
+        RoomControlsAlertSettings#ZoomRoomOffline: 'false'
+        RoomControlsAlertSettings#ZoomRoomComeBackOnline: 'false'
+        RoomControlsAlertSettings#SipRegistrationFailed: 'false'
+        RoomControlsAlertSettings#SipRegistrationReEnabled: 'false'
+        RoomControlsAlertSettings#MicSpeakerCameraDisconnected: 'false'
+        RoomControlsAlertSettings#MicSpeakerCameraReconnected: 'false'
+        RoomControlsAlertSettings#ZoomRoomDisplayDisconnected: 'false'
       control:
-        AccountSettings#UpcomingMeetingAlert:
+        RoomControlsAlertSettings#DetectMicrophoneErrorAlert:
           type: Switch
-          value: get("zoom_rooms").get("upcoming_meeting_alert").asText()
+          value: get("client_alert").get("detect_microphone_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#ShowAlertBeforeMeeting:
+        RoomControlsAlertSettings#DetectBluetoothMicrohponeErrorAlert:
           type: Switch
-          value: get("zoom_rooms").get("show_alert_before_meeting").asText()
+          value: get("client_alert").get("detect_bluetooth_microphone_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#StartAirplayMirroring:
+        RoomControlsAlertSettings#DetectSpeakerErrorAlert:
           type: Switch
-          value: get("zoom_rooms").get("start_airplay_mirroring").asText()
+          value: get("client_alert").get("detect_speaker_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#StartAirplayManually:
+        RoomControlsAlertSettings#DetectBluetoothSpeakerErrorAlert:
           type: Switch
-          value: get("zoom_rooms").get("start_airplay_manually").asText()
+          value: get("client_alert").get("detect_bluetooth_speaker_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#WeeklySystemRestart:
+        RoomControlsAlertSettings#DetectCameraErrorAlert:
           type: Switch
-          value: get("zoom_rooms").get("weekly_system_restart").asText()
+          value: get("client_alert").get("detect_camera_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#DisplayMeetingList:
+        RoomControlsAlertSettings#AudioNotMeetUsabilityThreshold:
           type: Switch
-          value: get("zoom_rooms").get("display_meeting_list").asText()
+          value: get("notification").get("audio_not_meet_usability_threshold")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#DisplayTopBanner:
+        RoomControlsAlertSettings#AudioMeetUsabilityThreshold:
           type: Switch
-          value: get("zoom_rooms").get("display_top_banner").asText()
+          value: get("notification").get("audio_meet_usability_threshold")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#DisplayFeedbackSurvey:
+        RoomControlsAlertSettings#BatteryLowAndNotCharging:
           type: Switch
-          value: get("zoom_rooms").get("display_feedback_survey").asText()
+          value: get("notification").get("battery_low_and_not_charging")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#AutoDirectSharing:
+        RoomControlsAlertSettings#BatteryIsCharging:
           type: Switch
-          value: get("zoom_rooms").get("auto_direct_sharing").asText()
+          value: get("notification").get("battery_is_charging")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#TransformMeetingToPrivate:
+#        RoomControlsAlertSettings#BatteryPercentage:
+#          type: Text
+#          value: get("notification").get("battery_percentage")?.asText()
+        RoomControlsAlertSettings#ControllerSchedulingDisconnected:
           type: Switch
-          value: get("zoom_rooms").get("transform_meeting_to_private").asText()
+          value: get("notification").get("controller_scheduling_disconnected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#HideIDForPrivateMeeting:
+        RoomControlsAlertSettings#ControllerSchedulingReconnected:
           type: Switch
-          value: get("zoom_rooms").get("hide_id_for_private_meeting").asText()
+          value: get("notification").get("controller_scheduling_reconnected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#AutoStartScheduledMeeting:
+        RoomControlsAlertSettings#CpuUsageHighDetected:
           type: Switch
-          value: get("zoom_rooms").get("auto_start_scheduled_meeting").asText()
+          value: get("notification").get("cpu_usage_high_detected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#AutoStopScheduledMeeting:
+        RoomControlsAlertSettings#NetworkUnstableDetected:
           type: Switch
-          value: get("zoom_rooms").get("auto_stop_scheduled_meeting").asText()
+          value: get("notification").get("network_unstable_detected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#AudioDeviceDailyAutoTest:
+        RoomControlsAlertSettings#ZoomRoomOffline:
           type: Switch
-          value: get("zoom_rooms").get("audio_device_daily_auto_test").asText()
+          value: get("notification").get("zoom_room_offline")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#SupportJoin3rdPartyMeeting:
+        RoomControlsAlertSettings#ZoomRoomComeBackOnline:
           type: Switch
-          value: get("zoom_rooms").get("support_join_3rd_party_meeting").asText()
+          value: get("notification").get("zoom_room_come_back_online")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#SecureConnectionChannel:
+        RoomControlsAlertSettings#SipRegistrationFailed:
           type: Switch
-          value: get("zoom_rooms").get("secure_connection_channel").asText()
+          value: get("notification").get("sip_registration_failed")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#MakeRoomAlternativeHost:
+        RoomControlsAlertSettings#SipRegistrationReEnabled:
           type: Switch
-          value: get("zoom_rooms").get("make_room_alternative_host").asText()
+          value: get("notification").get("sip_registration_re_enabled")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#EncryptSharedScreenContent:
+        RoomControlsAlertSettings#MicSpeakerCameraDisconnected:
           type: Switch
-          value: get("zoom_rooms").get("encrypt_shared_screen_content").asText()
+          value: get("notification").get("mic_speaker_camera_disconnected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#AllowMultipleContentSharing:
+        RoomControlsAlertSettings#MicSpeakerCameraReconnected:
           type: Switch
-          value: get("zoom_rooms").get("allow_multiple_content_sharing").asText()
+          value: get("notification").get("mic_speaker_camera_reconnected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#ShowNonVideoParticipants:
+        RoomControlsAlertSettings#ZoomRoomDisplayDisconnected:
           type: Switch
-          value: get("zoom_rooms").get("show_non_video_participants").asText()
+          value: get("notification").get("zoom_room_display_disconnected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#ShowCallHistoryInRoom:
+  - model:
+      name: AccountMeetingSettings
+      filter: get("room_id") == null
+      statistics:
+        AccountMeetingSettings#UpcomingMeetingAlert: 'false'
+        AccountMeetingSettings#ShowAlertBeforeMeeting: 'false'
+        AccountMeetingSettings#StartAirplayMirroring: 'false'
+        AccountMeetingSettings#StartAirplayManually: 'false'
+        AccountMeetingSettings#WeeklySystemRestart: 'false'
+        AccountMeetingSettings#DisplayMeetingList: 'false'
+        AccountMeetingSettings#DisplayTopBanner: 'false'
+        AccountMeetingSettings#DisplayFeedbackSurvey: 'false'
+        AccountMeetingSettings#AutoDirectSharing: 'false'
+        AccountMeetingSettings#TransformMeetingToPrivate: 'false'
+        AccountMeetingSettings#HideIDForPrivateMeeting: 'false'
+        AccountMeetingSettings#AutoStartScheduledMeeting: 'false'
+        AccountMeetingSettings#AutoStopScheduledMeeting: 'false'
+        AccountMeetingSettings#AudioDeviceDailyAutoTest: 'false'
+        AccountMeetingSettings#SupportJoin3rdPartyMeeting: 'false'
+        AccountMeetingSettings#EmailAddressPromptBeforeRecording: 'false'
+        AccountMeetingSettings#SecureConnectionChannel: 'false'
+        AccountMeetingSettings#MakeRoomAlternativeHost: 'false'
+        AccountMeetingSettings#EncryptSharedScreenContent: 'false'
+        AccountMeetingSettings#AllowMultipleContentSharing: 'false'
+        AccountMeetingSettings#ShowNonVideoParticipants: 'false'
+        AccountMeetingSettings#ShowCallHistoryInRoom: 'false'
+        AccountMeetingSettings#ShowContactListOnController: 'false'
+        AccountMeetingSettings#CountAttendeesNumberInRoom: 'false'
+        AccountMeetingSettings#SendWhiteboardToInternalContactOnly: 'false'
+      control:
+        AccountMeetingSettings#UpcomingMeetingAlert:
           type: Switch
-          value: get("zoom_rooms").get("show_call_history_in_room").asText()
+          value: get("zoom_rooms").get("upcoming_meeting_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#ShowContactListOnController:
+        AccountMeetingSettings#ShowAlertBeforeMeeting:
           type: Switch
-          value: get("zoom_rooms").get("show_contact_list_on_controller").asText()
+          value: get("zoom_rooms").get("show_alert_before_meeting")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#CountAttendeesNumberInRoom:
+        AccountMeetingSettings#StartAirplayMirroring:
           type: Switch
-          value: get("zoom_rooms").get("count_attendees_number_in_room").asText()
+          value: get("zoom_rooms").get("start_airplay_mirroring")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        AccountSettings#SendWhiteboardToInternalContactOnly:
+        AccountMeetingSettings#StartAirplayManually:
           type: Switch
-          value: get("zoom_rooms").get("send_whiteboard_to_internal_contact_only").asText()
+          value: get("zoom_rooms").get("start_airplay_manually")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#WeeklySystemRestart:
+          type: Switch
+          value: get("zoom_rooms").get("weekly_system_restart")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#DisplayMeetingList:
+          type: Switch
+          value: get("zoom_rooms").get("display_meeting_list")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#DisplayTopBanner:
+          type: Switch
+          value: get("zoom_rooms").get("display_top_banner")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#DisplayFeedbackSurvey:
+          type: Switch
+          value: get("zoom_rooms").get("display_feedback_survey")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#AutoDirectSharing:
+          type: Switch
+          value: get("zoom_rooms").get("auto_direct_sharing")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#TransformMeetingToPrivate:
+          type: Switch
+          value: get("zoom_rooms").get("transform_meeting_to_private")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#HideIDForPrivateMeeting:
+          type: Switch
+          value: get("zoom_rooms").get("hide_id_for_private_meeting")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#AutoStartScheduledMeeting:
+          type: Switch
+          value: get("zoom_rooms").get("auto_start_scheduled_meeting")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#AutoStopScheduledMeeting:
+          type: Switch
+          value: get("zoom_rooms").get("auto_stop_scheduled_meeting")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#AudioDeviceDailyAutoTest:
+          type: Switch
+          value: get("zoom_rooms").get("audio_device_daily_auto_test")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#SupportJoin3rdPartyMeeting:
+          type: Switch
+          value: get("zoom_rooms").get("support_join_3rd_party_meeting")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#EmailAddressPromptBeforeRecording:
+          type: Switch
+          value: get("zoom_rooms").get("email_address_prompt_before_recording")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#SecureConnectionChannel:
+          type: Switch
+          value: get("zoom_rooms").get("secure_connection_channel")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#MakeRoomAlternativeHost:
+          type: Switch
+          value: get("zoom_rooms").get("make_room_alternative_host")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#EncryptSharedScreenContent:
+          type: Switch
+          value: get("zoom_rooms").get("encrypt_shared_screen_content")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#AllowMultipleContentSharing:
+          type: Switch
+          value: get("zoom_rooms").get("allow_multiple_content_sharing")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#ShowNonVideoParticipants:
+          type: Switch
+          value: get("zoom_rooms").get("show_non_video_participants")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#ShowCallHistoryInRoom:
+          type: Switch
+          value: get("zoom_rooms").get("show_call_history_in_room")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#ShowContactListOnController:
+          type: Switch
+          value: get("zoom_rooms").get("show_contact_list_on_controller")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#CountAttendeesNumberInRoom:
+          type: Switch
+          value: get("zoom_rooms").get("count_attendees_number_in_room")?.asText()
+          labelOn: 'On'
+          labelOff: 'Off'
+        AccountMeetingSettings#SendWhiteboardToInternalContactOnly:
+          type: Switch
+          value: get("zoom_rooms").get("send_whiteboard_to_internal_contact_only")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
   - model:
       name: RoomMeetingSettings
       filter: get("room_id") == null
       statistics:
-        RoomSettings#UpcomingMeetingAlert: 'false'
-        RoomSettings#ShowAlertBeforeMeeting: 'false'
-        RoomSettings#StartAirplayMirroring: 'false'
-        RoomSettings#StartAirplayManually: 'false'
-        RoomSettings#WeeklySystemRestart: 'false'
-        RoomSettings#DisplayMeetingList: 'false'
-        RoomSettings#DisplayTopBanner: 'false'
-        RoomSettings#DisplayFeedbackSurvey: 'false'
-        RoomSettings#AutoDirectSharing: 'false'
-        RoomSettings#TransformMeetingToPrivate: 'false'
-        RoomSettings#HideIDForPrivateMeeting: 'false'
-        RoomSettings#AutoStartScheduledMeeting: 'false'
-        RoomSettings#AutoStopScheduledMeeting: 'false'
-        RoomSettings#HideShareInstruction: 'false'
-        RoomSettings#AudioDeviceDailyAutoTest: 'false'
-        RoomSettings#SupportJoin3rdPartyMeeting: 'false'
-        RoomSettings#EncryptSharedScreenContent: 'false'
-        RoomSettings#AllowMultipleContentSharing: 'false'
-        RoomSettings#ShowNonVideoParticipants: 'false'
-        RoomSettings#ShowCallHistoryInRoom: 'false'
-        RoomSettings#ShowContactListOnController: 'false'
-        RoomSettings#CountAttendeesNumberInRoom: 'false'
-        RoomSettings#SendWhiteboardToInternalContactOnly: 'false'
+        RoomControlsMeetingSettings#UpcomingMeetingAlert: 'false'
+        RoomControlsMeetingSettings#ShowAlertBeforeMeeting: 'false'
+        RoomControlsMeetingSettings#StartAirplayMirroring: 'false'
+        RoomControlsMeetingSettings#StartAirplayManually: 'false'
+        RoomControlsMeetingSettings#WeeklySystemRestart: 'false'
+        RoomControlsMeetingSettings#DisplayMeetingList: 'false'
+        RoomControlsMeetingSettings#DisplayTopBanner: 'false'
+        RoomControlsMeetingSettings#DisplayFeedbackSurvey: 'false'
+        RoomControlsMeetingSettings#AutoDirectSharing: 'false'
+        RoomControlsMeetingSettings#TransformMeetingToPrivate: 'false'
+        RoomControlsMeetingSettings#HideIDForPrivateMeeting: 'false'
+        RoomControlsMeetingSettings#AutoStartScheduledMeeting: 'false'
+        RoomControlsMeetingSettings#AutoStopScheduledMeeting: 'false'
+        RoomControlsMeetingSettings#HideShareInstruction: 'false'
+        RoomControlsMeetingSettings#AudioDeviceDailyAutoTest: 'false'
+        RoomControlsMeetingSettings#SupportJoin3rdPartyMeeting: 'false'
+        RoomControlsMeetingSettings#EncryptSharedScreenContent: 'false'
+        RoomControlsMeetingSettings#AllowMultipleContentSharing: 'false'
+        RoomControlsMeetingSettings#ShowNonVideoParticipants: 'false'
+        RoomControlsMeetingSettings#ShowCallHistoryInRoom: 'false'
+        RoomControlsMeetingSettings#ShowContactListOnController: 'false'
+        RoomControlsMeetingSettings#CountAttendeesNumberInRoom: 'false'
+        RoomControlsMeetingSettings#SendWhiteboardToInternalContactOnly: 'false'
       control:
-        RoomSettings#UpcomingMeetingAlert:
+        RoomControlsMeetingSettings#UpcomingMeetingAlert:
           type: Switch
           value: get("zoom_rooms").get("upcoming_meeting_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#ShowAlertBeforeMeeting:
+        RoomControlsMeetingSettings#ShowAlertBeforeMeeting:
           type: Switch
           value: get("zoom_rooms").get("show_alert_before_meeting")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#StartAirplayMirroring:
+        RoomControlsMeetingSettings#StartAirplayMirroring:
           type: Switch
           value: get("zoom_rooms").get("start_airplay_mirroring")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#StartAirplayManually:
+        RoomControlsMeetingSettings#StartAirplayManually:
           type: Switch
           value: get("zoom_rooms").get("start_airplay_manually")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#WeeklySystemRestart:
+        RoomControlsMeetingSettings#WeeklySystemRestart:
           type: Switch
           value: get("zoom_rooms").get("weekly_system_restart")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#DisplayMeetingList:
+        RoomControlsMeetingSettings#DisplayMeetingList:
           type: Switch
           value: get("zoom_rooms").get("display_meeting_list")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#DisplayTopBanner:
+        RoomControlsMeetingSettings#DisplayTopBanner:
           type: Switch
           value: get("zoom_rooms").get("display_top_banner")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#DisplayFeedbackSurvey:
+        RoomControlsMeetingSettings#DisplayFeedbackSurvey:
           type: Switch
           value: get("zoom_rooms").get("display_feedback_survey")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#AutoDirectSharing:
+        RoomControlsMeetingSettings#AutoDirectSharing:
           type: Switch
           value: get("zoom_rooms").get("auto_direct_sharing")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#TransformMeetingToPrivate:
+        RoomControlsMeetingSettings#TransformMeetingToPrivate:
           type: Switch
           value: get("zoom_rooms").get("transform_meeting_to_private")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#HideIDForPrivateMeeting:
+        RoomControlsMeetingSettings#HideIDForPrivateMeeting:
           type: Switch
           value: get("zoom_rooms").get("hide_id_for_private_meeting")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#AutoStartScheduledMeeting:
+        RoomControlsMeetingSettings#AutoStartScheduledMeeting:
           type: Switch
           value: get("zoom_rooms").get("auto_start_scheduled_meeting")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#HideShareInstruction:
+        RoomControlsMeetingSettings#HideShareInstruction:
           type: Switch
           value: get("zoom_rooms").get("hide_share_instruction")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#AutoStopScheduledMeeting:
+        RoomControlsMeetingSettings#AutoStopScheduledMeeting:
           type: Switch
           value: get("zoom_rooms").get("auto_stop_scheduled_meeting")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#AudioDeviceDailyAutoTest:
+        RoomControlsMeetingSettings#AudioDeviceDailyAutoTest:
           type: Switch
           value: get("zoom_rooms").get("audio_device_daily_auto_test")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#SupportJoin3rdPartyMeeting:
+        RoomControlsMeetingSettings#SupportJoin3rdPartyMeeting:
           type: Switch
           value: get("zoom_rooms").get("support_join_3rd_party_meeting")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#EncryptSharedScreenContent:
+        RoomControlsMeetingSettings#EncryptSharedScreenContent:
           type: Switch
           value: get("zoom_rooms").get("encrypt_shared_screen_content")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#AllowMultipleContentSharing:
+        RoomControlsMeetingSettings#AllowMultipleContentSharing:
           type: Switch
           value: get("zoom_rooms").get("allow_multiple_content_sharing")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#ShowNonVideoParticipants:
+        RoomControlsMeetingSettings#ShowNonVideoParticipants:
           type: Switch
           value: get("zoom_rooms").get("show_non_video_participants")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#ShowCallHistoryInRoom:
+        RoomControlsMeetingSettings#ShowCallHistoryInRoom:
           type: Switch
           value: get("zoom_rooms").get("show_call_history_in_room")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#ShowContactListOnController:
+        RoomControlsMeetingSettings#ShowContactListOnController:
           type: Switch
           value: get("zoom_rooms").get("show_contact_list_on_controller")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#CountAttendeesNumberInRoom:
+        RoomControlsMeetingSettings#CountAttendeesNumberInRoom:
           type: Switch
           value: get("zoom_rooms").get("count_attendees_number_in_room")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomSettings#SendWhiteboardToInternalContactOnly:
+        RoomControlsMeetingSettings#SendWhiteboardToInternalContactOnly:
           type: Switch
           value: get("zoom_rooms").get("send_whiteboard_to_internal_contact_only")?.asText()
           labelOn: 'On'
