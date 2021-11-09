@@ -8,7 +8,7 @@
     <artifactId>symphony-dal-communicator-aggregator-zoom-rooms</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <properties>
-        <symphonyApiVersion>RELEASE</symphonyApiVersion>
+        <symphonyApiVersion>5.3.0</symphonyApiVersion>
         <timestamp>${maven.build.timestamp}</timestamp>
         <maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
     </properties>
@@ -102,23 +102,23 @@
         <dependency>
             <groupId>com.avispl.symphony.api</groupId>
             <artifactId>symphony-api-dal</artifactId>
-            <version>LATEST</version>
+            <version>${symphonyApiVersion}</version>
             <scope>system</scope>
-            <systemPath>${basedir}/lib/symphony-api-dal-5.2.0.jar</systemPath>
+            <systemPath>${basedir}/lib/symphony-api-dal-5.3.0.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>com.avispl.symphony.dal</groupId>
             <artifactId>symphony-dal-commons</artifactId>
-            <version>LATEST</version>
+            <version>${symphonyApiVersion}</version>
             <scope>system</scope>
-            <systemPath>${basedir}/lib/symphony-dal-commons-5.2.0.jar</systemPath>
+            <systemPath>${basedir}/lib/symphony-dal-commons-5.3.0.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>com.avispl.symphony.api</groupId>
             <artifactId>symphony-api-commons</artifactId>
-            <version>LATEST</version>
+            <version>${symphonyApiVersion}</version>
             <scope>system</scope>
-            <systemPath>${basedir}/lib/symphony-api-commons-5.2.0.jar</systemPath>
+            <systemPath>${basedir}/lib/symphony-api-commons-5.3.0.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>org.icmp4j</groupId>
