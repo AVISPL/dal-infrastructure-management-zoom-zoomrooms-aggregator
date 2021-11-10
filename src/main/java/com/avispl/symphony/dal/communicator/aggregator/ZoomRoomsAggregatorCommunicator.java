@@ -155,8 +155,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String ZOOM_ROOM_METRICS = "metrics/zoomrooms/%s";
     private static final String ZOOM_ROOM_LOCATIONS = "rooms/locations?page_size=5000";
     private static final String ZOOM_UPDATE_APP_VERSION = "/rooms/%s/devices/%s/app_version";
+    private static final String ZOOM_USER_DETAILS = "/users/%s";
 
     private static final String ZOOM_ROOM_CLIENT_RPC = "/rooms/%s/zrclient";
+    private static final String ZOOM_ROOM_CLIENT_RPC_MEETINGS = "/rooms/%s/meetings";
 
     private AggregatedDeviceProcessor aggregatedDeviceProcessor;
     /**
@@ -352,6 +354,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                             restartZoomRoomClient(id);
                             controlValidated = true;
                             break;
+                        case "RoomControls#StartRoomPersonalMeeting":
+                            joinRoomPMI(id);
+                            controlValidated = true;
                         default:
                             break;
                     }
@@ -568,8 +573,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param method to use for rpc request
      * @return {@code Map<String, String>} request map
      */
-    private Map<String, String> buildRpcRequest(String method) {
-        Map<String, String> command = new HashMap<>();
+    private Map<String, Object> buildRpcRequest(String method) {
+        Map<String, Object> command = new HashMap<>();
         command.put("jsonrpc", "2.0");
         command.put("method", method);
         return command;
@@ -608,14 +613,26 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
+     * Retrieve ZoomRooms user details
+     *
+     * @param userId id of a room user
+     * @return response JsonNode
+     * @throws Exception if a communication error occurs
+     */
+    private JsonNode retrieveUserDetails(String userId) throws Exception {
+        return doGet(String.format(ZOOM_USER_DETAILS, userId), JsonNode.class);
+    }
+
+    /**
      * Populate ZoomRooms with properties: metrics, devices, controls etc.
      *
      * @param roomId Id of zoom room
      * @throws Exception if any error occurs
      */
     private void populateDeviceDetails(String roomId) throws Exception {
-        JsonNode roomMetrics = retrieveZoomRoomMetrics(roomId);
+        AggregatedDevice aggregatedZoomRoomDevice = aggregatedDevices.get(roomId);
 
+        JsonNode roomMetrics = retrieveZoomRoomMetrics(roomId);
         HashMap<String, String> roomProperties = new HashMap<>();
         if (roomMetrics != null) {
             Map<String, String> roomIssues = RoomStatusProcessor.processIssuesList(roomMetrics.get("issues"));
@@ -625,12 +642,17 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             aggregatedDeviceProcessor.applyProperties(roomProperties, roomMetrics, "ZoomRoomMetrics");
         }
 
-        Map<String, String> properties = new HashMap<>();
-        List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
+        JsonNode roomUserDetails = retrieveUserDetails(aggregatedZoomRoomDevice.getSerialNumber());
+        Map<String, String> roomUserProperties = new HashMap<>();
+        if (roomUserDetails != null) {
+            aggregatedDeviceProcessor.applyProperties(roomUserProperties, roomUserDetails, "RoomUserDetails");
+        }
 
-        properties.putAll(roomProperties);
+        Map<String, String> properties = new HashMap<>(roomProperties);
+        properties.putAll(roomUserProperties);
 
         Map<String, String> settingsProperties = new HashMap<>();
+        List<AdvancedControllableProperty> controllableProperties = new ArrayList<>();
         List<AdvancedControllableProperty> settingsControls = new ArrayList<>();
 
         JsonNode meetingSettings = retrieveRoomSettings(roomId, "meeting");
@@ -683,12 +705,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
 
         String roomStatus = properties.get("Metrics#RoomStatus");
-        if (!StringUtils.isNullOrEmpty(roomStatus) && roomStatus.equals("InMeeting")) {
+        if (!StringUtils.isNullOrEmpty(roomStatus) && roomStatus.equals("In Meeting")) {
             properties.put("RoomControls#EndCurrentMeeting", "");
             controllableProperties.add(createButton("RoomControls#EndCurrentMeeting", "End", "Ending...", 0L));
 
             properties.put("RoomControls#LeaveCurrentMeeting", "");
             controllableProperties.add(createButton("RoomControls#LeaveCurrentMeeting", "Leave", "Leaving...", 0L));
+        } else if (!StringUtils.isNullOrEmpty(roomStatus) && !roomStatus.equals("Offline")){
+            properties.put("RoomControls#StartRoomPersonalMeeting", "");
+            controllableProperties.add(createButton("RoomControls#StartRoomPersonalMeeting", "Start", "Starting...", 0L));
         }
 
         if (!StringUtils.isNullOrEmpty(roomStatus) && !roomStatus.equals("Offline")) {
@@ -696,7 +721,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             controllableProperties.add(createButton("RoomControls#RestartZoomRoomsClient", "Restart", "Restarting...", 0L));
         }
 
-        AggregatedDevice aggregatedZoomRoomDevice = aggregatedDevices.get(roomId);
         aggregatedZoomRoomDevice.setProperties(properties);
         aggregatedZoomRoomDevice.setControllableProperties(controllableProperties);
         aggregatedZoomRoomDevice.setTimestamp(System.currentTimeMillis());
@@ -863,28 +887,52 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * Restart ZoomRoom client by sending jsonRpc command
-     * @param roomId id of the room to restart
+     * @param userId id of the room user to restart
      * @throws Exception if any error occurs
      */
-    private void restartZoomRoomClient(String roomId) throws Exception {
-        doPost(String.format(ZOOM_ROOM_CLIENT_RPC, roomId), buildRpcRequest("restart"));
+    private void restartZoomRoomClient(String userId) throws Exception {
+        doPost(String.format(ZOOM_ROOM_CLIENT_RPC, userId), buildRpcRequest("restart"));
     }
 
     /**
      * End current Zoom meeting by sending jsonRpc command
-     * @param roomId id of the room to end current meeting for
+     * @param userId id of the room user to make end current meeting for
      * @throws Exception if any error occurs
      */
-    private void endCurrentMeeting(String roomId) throws Exception {
-        doPost(String.format(ZOOM_ROOM_CLIENT_RPC, roomId), buildRpcRequest("end"));
+    private void endCurrentMeeting(String userId) throws Exception {
+        doPost(String.format(ZOOM_ROOM_CLIENT_RPC_MEETINGS, userId), buildRpcRequest("end"));
     }
 
     /**
      * Leave current Zoom meeting by sending jsonRpc command
-     * @param roomId id of the room make leave the meeting
+     * @param userId id of the room user to make leave the meeting
      * @throws Exception if any error occurs
      */
-    private void leaveCurrentMeeting(String roomId) throws Exception {
-        doPost(String.format(ZOOM_ROOM_CLIENT_RPC, roomId), buildRpcRequest("leave"));
+    private void leaveCurrentMeeting(String userId) throws Exception {
+        doPost(String.format(ZOOM_ROOM_CLIENT_RPC_MEETINGS, userId), buildRpcRequest("leave"));
+    }
+
+    /**
+     * Join room user's Personal meeting room
+     * @param userId id of the room user to make leave the meeting
+     * @throws Exception if any error occurs
+     */
+    private void joinRoomPMI(String userId) throws Exception {
+        Map<String, Object> request = buildRpcRequest("join");
+
+        Map<String, String> params = new HashMap<>();
+        aggregatedDevices.values().stream().filter(aggregatedDevice ->
+                aggregatedDevice.getSerialNumber().equals(userId)).findFirst().ifPresent(aggregatedDevice -> {
+                    Map<String, String> properties = aggregatedDevice.getProperties();
+                    if(properties != null) {
+                        params.put("meeting_number", properties.get("RoomUserDetails#PMI"));
+                    }
+                });
+        if(params.isEmpty()) {
+            throw new IllegalArgumentException("Unable to start Personal Meeting for user " + userId);
+        }
+
+        request.put("params", params);
+        doPost(String.format(ZOOM_ROOM_CLIENT_RPC_MEETINGS, userId), request);
     }
 }
