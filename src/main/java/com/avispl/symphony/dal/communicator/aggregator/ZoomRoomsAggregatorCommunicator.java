@@ -310,43 +310,55 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         Object value = controllableProperty.getValue();
 
         if (!StringUtils.isNullOrEmpty(roomId) && !StringUtils.isNullOrEmpty(property)) {
+            boolean controlValidated = false;
 
-            if (property.startsWith("RoomControlsMeetingSettings#") || property.startsWith("RoomControlsAlertSettings#")) {
-                Setting setting = Setting.fromString(ZoomRoomsSetting.valueOf(property.split("#")[1]).toString());
-                if (setting == null) {
-                    throw new IllegalArgumentException("Invalid property name provided: " + property);
-                }
-                String settingValue;
-                if (property.endsWith(ZoomRoomsSetting.BatteryPercentage.name())) {
-                    // BatteryPercentage is a Numeric controllable property
-                    settingValue = String.valueOf(value);
+            try {
+                if (property.startsWith("RoomControlsMeetingSettings#") || property.startsWith("RoomControlsAlertSettings#")) {
+                    Setting setting = Setting.fromString(ZoomRoomsSetting.valueOf(property.split("#")[1]).toString());
+                    if (setting == null) {
+                        throw new IllegalArgumentException("Invalid property name provided: " + property);
+                    }
+                    String settingValue;
+                    if (property.endsWith(ZoomRoomsSetting.BatteryPercentage.name())) {
+                        // BatteryPercentage is a Numeric controllable property
+                        settingValue = String.valueOf(value);
+                    } else {
+                        settingValue = "0".equals(String.valueOf(value)) ? "false" : "true";
+                    }
+                    updateRoomSetting(roomId, setting.getSettingName(), settingValue, setting.getSettingType(), setting.getParentNode());
+                    controlValidated = true;
+                    return;
+                } else if (property.startsWith("AccountMeetingSettings#") || property.startsWith("AccountAlertSettings#")) {
+                    Setting setting = Setting.fromString(ZoomRoomsSetting.valueOf(property.split("#")[1]).toString());
+                    if (setting == null) {
+                        throw new IllegalArgumentException("Invalid property name provided: " + property);
+                    }
+                    String settingValue = "0".equals(String.valueOf(value)) ? "false" : "true";
+                    updateAccountSettings(setting.getSettingName(), settingValue, setting.getSettingType(), setting.getParentNode());
+                    controlValidated = true;
+                    return;
                 } else {
-                    settingValue = "0".equals(String.valueOf(value)) ? "false" : "true";
+                    String id = retrieveIdByRoomId(roomId);
+                    switch (property) {
+                        case "RoomControls#LeaveCurrentMeeting":
+                            leaveCurrentMeeting(id);
+                            controlValidated = true;
+                            break;
+                        case "RoomControls#EndCurrentMeeting":
+                            endCurrentMeeting(id);
+                            controlValidated = true;
+                            break;
+                        case "RoomControls#RestartZoomRoomsClient":
+                            restartZoomRoomClient(id);
+                            controlValidated = true;
+                            break;
+                        default:
+                            break;
+                    }
                 }
-                updateRoomSetting(roomId, setting.getSettingName(), settingValue, setting.getSettingType(), setting.getParentNode());
-                return;
-            } else if (property.startsWith("AccountMeetingSettings#") || property.startsWith("AccountAlertSettings#")) {
-                Setting setting = Setting.fromString(ZoomRoomsSetting.valueOf(property.split("#")[1]).toString());
-                if (setting == null) {
-                    throw new IllegalArgumentException("Invalid property name provided: " + property);
-                }
-                String settingValue = "0".equals(String.valueOf(value)) ? "false" : "true";
-                updateAccountSettings(setting.getSettingName(), settingValue, setting.getSettingType(), setting.getParentNode());
-                return;
-            } else {
-                String id = retrieveIdByRoomId(roomId);
-                switch (property) {
-                    case "RoomControls#LeaveCurrentMeeting":
-                        leaveCurrentMeeting(id);
-                        break;
-                    case "RoomControls#EndCurrentMeeting":
-                        endCurrentMeeting(id);
-                        break;
-                    case "RoomControls#RestartZoomRoomsClient":
-                        restartZoomRoomClient(id);
-                        break;
-                    default:
-                        break;
+            } finally {
+                if(controlValidated) {
+                    updateCachedControllablePropertyValue(roomId, property, String.valueOf(value));
                 }
             }
         }
@@ -688,6 +700,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         aggregatedZoomRoomDevice.setProperties(properties);
         aggregatedZoomRoomDevice.setControllableProperties(controllableProperties);
         aggregatedZoomRoomDevice.setTimestamp(System.currentTimeMillis());
+    }
+
+    /**
+     * Update value of a cached controllable property to a new value
+     *
+     * @param roomId id of the zoomRoom to look up
+     * @param propertyName name of the property
+     * @param value new value of the property
+     * */
+    private void updateCachedControllablePropertyValue(String roomId, String propertyName, String value) {
+        AggregatedDevice aggregatedDevice = aggregatedDevices.get(roomId);
+        aggregatedDevice.getControllableProperties().stream().filter(advancedControllableProperty ->
+                advancedControllableProperty.getName().equals(propertyName)).findFirst()
+                .ifPresent(advancedControllableProperty -> advancedControllableProperty.setValue(value));
+        aggregatedDevice.getProperties().put(propertyName, value);
     }
 
     /**
