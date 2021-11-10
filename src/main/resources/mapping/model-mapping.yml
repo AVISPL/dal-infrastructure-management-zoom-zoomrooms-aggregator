@@ -25,6 +25,15 @@ models:
         Location#Type: get("type")
         Location#ParentLocationID: get("parent_location_id")
   - model:
+      name: RoomUserDetails
+      filter: get("room_id") == null
+      properties:
+        RoomUserDetails#RoleName: get("role_name")
+        RoomUserDetails#PMI: get("pmi")
+        RoomUserDetails#UsePMI: get("use_pmi")
+        RoomUserDetails#Timezone: get("timezone")
+        RoomUserDetails#Status: get("status")
+  - model:
       name: RoomDevice
       filter: get("room_id") == null
       properties:
