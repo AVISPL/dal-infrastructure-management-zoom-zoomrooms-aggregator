@@ -115,4 +115,34 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
         Assert.assertFalse((Boolean.parseBoolean(String.valueOf(endControl.getValue()))));
     }
+
+    @Test
+    public void controlNumericRoomSettingTest() throws Exception {
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+
+        int value = 20;
+        String roomId = "kjG6xV4jScasP0oDvBwSRA";
+        String property = "RoomControlsAlertSettings#BatteryPercentage";
+        ControllableProperty controllableProperty = new ControllableProperty();
+        controllableProperty.setProperty(property);
+        controllableProperty.setValue(value);
+        controllableProperty.setDeviceId(roomId);
+
+        AdvancedControllableProperty startControl = mockAggregatorCommunicator.retrieveMultipleStatistics().stream().filter(aggregatedDevice ->
+                aggregatedDevice.getDeviceId().equals(roomId)).findFirst().get()
+                .getControllableProperties().stream().filter(advancedControllableProperty ->
+                        advancedControllableProperty.getName().equals(property)).findFirst().get();
+
+        mockAggregatorCommunicator.controlProperty(controllableProperty);
+
+        Thread.sleep(60000);
+
+        AdvancedControllableProperty endControl = mockAggregatorCommunicator.retrieveMultipleStatistics().stream().filter(aggregatedDevice ->
+                aggregatedDevice.getDeviceId().equals(roomId)).findFirst().get()
+                .getControllableProperties().stream().filter(advancedControllableProperty ->
+                        advancedControllableProperty.getName().equals(property)).findFirst().get();
+
+        Assert.assertEquals(value, endControl.getValue());
+    }
 }
