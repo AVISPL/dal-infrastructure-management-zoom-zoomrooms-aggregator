@@ -619,7 +619,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (roomMetrics != null) {
             Map<String, String> roomIssues = RoomStatusProcessor.processIssuesList(roomMetrics.get("issues"));
 
-            roomIssues.forEach((key, value) -> roomProperties.put("ZoomRoomStatus#" + key, value));
+            roomIssues.forEach((key, value) -> roomProperties.put("RoomStatus#" + key, value));
 
             aggregatedDeviceProcessor.applyProperties(roomProperties, roomMetrics, "ZoomRoomMetrics");
         }
@@ -652,7 +652,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 Map<String, String> properties = new HashMap<>();
                 aggregatedDeviceProcessor.applyProperties(properties, deviceNode, "RoomDevice");
                 for (Map.Entry<String, String> entry : properties.entrySet()) {
-                    room.getProperties().put(String.format("RoomDevice_%s_%s", properties.get("Info#ID"), entry.getKey()), entry.getValue());
+                    room.getProperties().put(String.format("ZoomRoomDevice_%s_%s", properties.get("Info#ID"), entry.getKey()), entry.getValue());
                 }
             }
         }
