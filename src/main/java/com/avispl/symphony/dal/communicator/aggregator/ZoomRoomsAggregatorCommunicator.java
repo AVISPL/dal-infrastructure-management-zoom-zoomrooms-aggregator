@@ -17,6 +17,7 @@ import com.avispl.symphony.dal.aggregator.parser.PropertiesMappingParser;
 import com.avispl.symphony.dal.communicator.RestCommunicator;
 import com.avispl.symphony.dal.communicator.aggregator.settings.Setting;
 import com.avispl.symphony.dal.communicator.aggregator.settings.ZoomRoomsSetting;
+import com.avispl.symphony.dal.communicator.aggregator.status.RoomStatusProcessor;
 import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpHeaders;
@@ -48,6 +49,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String ZOOM_ROOM_SETTINGS_URL = "/rooms/%s/settings"; // Requires room Id
     private static final String ZOOM_ROOM_ACCOUNT_SETTINGS_URL = "rooms/account_settings";
     private static final String ZOOM_ROOM_METRICS = "metrics/zoomrooms?page_size=5000";
+    private static final String ZOOM_ROOM_LOCATIONS = "rooms/locations?page_size=5000";
     private static final String ZOOM_UPDATE_APP_VERSION = "/rooms/%s/devices/%s/app_version";
 
     private static final String ZOOM_ROOM_CLIENT_RPC = "/rooms/%s/zrclient";
@@ -56,9 +58,48 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private AggregatedDeviceProcessor aggregatedDeviceProcessor;
     private List<AggregatedDevice> aggregatedDevices;
     private Properties adapterProperties;
+
+    private String zoomRoomLocations;
+    private String zoomRoomTypes; // ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly
     private String devicesProperties;
     private String aggregatorProperties;
     private String authorizationToken;
+
+    /**
+     * Retrieves {@code {@link #zoomRoomLocations}}
+     *
+     * @return value of {@link #zoomRoomLocations}
+     */
+    public String getZoomRoomLocations() {
+        return zoomRoomLocations;
+    }
+
+    /**
+     * Sets {@code zoomRoomLocations}
+     *
+     * @param zoomRoomLocations the {@code java.lang.String} field
+     */
+    public void setZoomRoomLocations(String zoomRoomLocations) {
+        this.zoomRoomLocations = zoomRoomLocations;
+    }
+
+    /**
+     * Retrieves {@code {@link #zoomRoomTypes}}
+     *
+     * @return value of {@link #zoomRoomTypes}
+     */
+    public String getZoomRoomTypes() {
+        return zoomRoomTypes;
+    }
+
+    /**
+     * Sets {@code zoomRoomTypes}, removes whitespaces to make csv line ready for use as a query string parameter
+     *
+     * @param zoomRoomTypes the {@code java.lang.String} field
+     */
+    public void setZoomRoomTypes(String zoomRoomTypes) {
+        this.zoomRoomTypes = zoomRoomTypes.replaceAll(" ", "");
+    }
 
     /**
      * Retrieves {@code {@link #devicesProperties}}
@@ -315,13 +356,49 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
+     * Filter Zoom Rooms based on location id.
+     * In order to make it more user-friendly, it is expected that {@link #zoomRoomLocations} will contain
+     * csv list of Location Names, e.g "Country/Region1", "State1" etc.
+     *
+     * TODO: check location hierarchy, it may be necessary to check ParentLocationId in order to retrieve the right one.
+     *
+     * @param rooms list of known zoom rooms
+     * @throws Exception if a communication error occurs
+     */
+    private void filterRoomsByLocation (List<AggregatedDevice> rooms) throws Exception {
+        if (!StringUtils.isNullOrEmpty(zoomRoomLocations)) {
+            List<String> supportedLocationIds = new ArrayList<>();
+            JsonNode roomLocations = retrieveZoomRoomLocations();
+            if(roomLocations != null && roomLocations.isArray()) {
+                for (JsonNode roomLocation : roomLocations) {
+                    Map<String, String> location = new HashMap<>();
+                    aggregatedDeviceProcessor.applyProperties(location, roomLocation, "RoomLocation");
+                    if (zoomRoomLocations.contains(location.get("Location#Name"))) {
+                        supportedLocationIds.add(location.get("Location#ID"));
+                    }
+                }
+            }
+
+            rooms.removeIf(aggregatedDevice -> !supportedLocationIds.contains(aggregatedDevice.getProperties().get("LocationId")));
+        } else {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Locations filter is not provided, skipping room filtering by location.");
+            }
+        }
+    }
+
+    /**
      * Retrieve list of ZoomRooms available
      *
      * @return response JsonNode
      * @throws Exception if a communication error occurs
      */
     private JsonNode retrieveZoomRooms() throws Exception {
-        return doGet(ZOOM_ROOMS_URL, JsonNode.class);
+        StringBuilder queryString = new StringBuilder();
+        if (!StringUtils.isNullOrEmpty(zoomRoomTypes)) {
+            queryString.append("&type=").append(zoomRoomTypes);
+        }
+        return doGet(ZOOM_ROOMS_URL + queryString.toString(), JsonNode.class);
     }
 
     /**
@@ -331,11 +408,17 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private void retrieveRoomDevicesProperties(List<AggregatedDevice> rooms) throws Exception {
+        filterRoomsByLocation(rooms);
+
         JsonNode roomMetrics = retrieveZoomRoomMetrics();
         Map<String, Map<String, String>> roomMetricsProperties = new HashMap<>();
         if (roomMetrics != null && roomMetrics.isArray()) {
             for (JsonNode roomMetric: roomMetrics) {
+                Map<String, String> roomIssues = RoomStatusProcessor.processIssuesList(roomMetric.get("issues"));
+
                 HashMap<String, String> roomProperties = new HashMap<>();
+                roomIssues.forEach((key, value) -> roomProperties.put("ZoomRoomStatus#" + key, value));
+
                 aggregatedDeviceProcessor.applyProperties(roomProperties, roomMetric, "ZoomRoomMetrics");
                 roomMetricsProperties.put(roomMetric.get("id").asText(), roomProperties);
             }
@@ -419,6 +502,20 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         JsonNode roomsMetrics = doGet(ZOOM_ROOM_METRICS, JsonNode.class);
         if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("zoom_rooms")) {
             return roomsMetrics.get("zoom_rooms");
+        }
+        return null;
+    }
+
+    /**
+     * Retrieve list of ZoomRooms locations
+     *
+     * @return response JsonNode
+     * @throws Exception if any error occurs
+     */
+    private JsonNode retrieveZoomRoomLocations() throws Exception {
+        JsonNode roomsMetrics = doGet(ZOOM_ROOM_LOCATIONS, JsonNode.class);
+        if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("locations")) {
+            return roomsMetrics.get("locations");
         }
         return null;
     }

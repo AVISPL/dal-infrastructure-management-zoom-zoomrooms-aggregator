@@ -14,7 +14,16 @@ models:
         deviceMake: Zoom
         deviceModel: Zoom Room
         deviceOnline: get("status").asText().equals("Offline") != true
-#      dynamicStatistics:
+      properties:
+        LocationId: get("location_id")
+  - model:
+      name: RoomLocation
+      filter: get("room_id") == null
+      properties:
+        Location#ID: get("id")
+        Location#Name: get("name")
+        Location#Type: get("type")
+        Location#ParentLocationID: get("parent_location_id")
   - model:
       name: RoomDevice
       filter: get("room_id") == null
@@ -38,7 +47,6 @@ models:
         Metrics#Speaker: get("speaker")
         Metrics#LastStartTime: get("last_start_time")
         Metrics#Health: get("health")
-        Metrics#Issues: get("issues")
   - model:
       name: AccountAlertSettings
       filter: get("room_id") == null
