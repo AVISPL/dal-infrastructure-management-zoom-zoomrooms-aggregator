@@ -9,8 +9,10 @@ import org.junit.Assert;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
+import org.junit.platform.commons.util.StringUtils;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Tag("test")
 public class ZoomRoomsAggregatorCommunicatorTest {
@@ -29,9 +31,52 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     }
 
     @Test
-    public void getAggregatedDevicesTest() throws Exception {
-        List<AggregatedDevice> aggregatedDevices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Assert.assertEquals(18, aggregatedDevices.size());
+    public void getDevicesWithFilteringTest() throws Exception {
+        mockAggregatorCommunicator.setZoomRoomTypes("ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
+        List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(18, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
+
+        mockAggregatorCommunicator.setZoomRoomTypes(" DigitalSignageOnly");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertTrue(devices.isEmpty());
+
+        mockAggregatorCommunicator.setZoomRoomTypes("");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(18, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
+
+        mockAggregatorCommunicator.setZoomRoomLocations("SomeLocationThatNoneOfTheDevicesHave");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertTrue(devices.isEmpty());
+
+        mockAggregatorCommunicator.setZoomRoomLocations("");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(18, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
+    }
+
+    @Test
+    public void getDevicesWithDelayTest() throws Exception {
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(300000);
+        List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(18, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
     }
 
     @Test
