@@ -108,6 +108,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
                 List<AggregatedDevice> scannedDevicesList = new ArrayList<>(aggregatedDevices.values());
 
+                try {
+                    // The following request collect all the information, so in order to save number of requests, which is
+                    // daily limited for certain APIs, we need to request them once per monitoring cycle.
+                    // TODO: consider adding static/configurable timeout
+                    retrieveZoomRoomMetrics();
+                } catch (Exception e) {
+                    logger.error("Error occurred during ZoomRooms metrics retrieval: " + e.getMessage() + " with cause: " + e.getCause().getMessage());
+                }
+
                 for (AggregatedDevice aggregatedDevice : scannedDevicesList) {
                     if (!inProgress) {
                         break;
@@ -609,10 +618,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (zoomRooms.isEmpty()) {
             // If all the devices were not populated for any specific reason (no devices available, filtering, etc)
             aggregatedDevices.clear();
-        } else {
-            // The following request collect all the information, so in order to save number of requests, which is
-            // daily limited for certain APIs, we need to request them once per monitoring cycle.
-            retrieveZoomRoomMetrics();
         }
 
         nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
