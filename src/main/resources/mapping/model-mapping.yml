@@ -13,9 +13,10 @@ models:
         deviceName: get("name")
         deviceMake: Zoom
         deviceModel: Zoom Room
-        deviceOnline: get("status").asText().equals("Offline") != true
+        deviceOnline: get("status")?.asText().equals("Offline") != true
       properties:
         LocationId: get("location_id")
+        Metrics#RoomStatus: get("status")?.asText()?.replace(" ", "")
   - model:
       name: RoomLocation
       filter: get("room_id") == null
@@ -33,6 +34,8 @@ models:
         RoomUserDetails#UsePMI: get("use_pmi")
         RoomUserDetails#Timezone: get("timezone")
         RoomUserDetails#Status: get("status")
+        Metrics#RoomStatus: ''
+        RoomUserDetails#PersonalMeetingURL: get("personal_meeting_url")
   - model:
       name: RoomDevice
       filter: get("room_id") == null
@@ -41,6 +44,7 @@ models:
         Info#AppVersion: get("app_version")
         Info#DeviceSystem: get("device_system")
         Info#DeviceStatus: get("status")
+        Metrics#RoomStatus: ''
         Info#ID: get("id")
   - model:
       name: ZoomRoomMetrics
@@ -49,13 +53,14 @@ models:
         Metrics#CalendarName: get("calendar_name")
         Metrics#Email: get("email")
         Metrics#AccountType: get("account_type")
-        Metrics#RoomStatus: get("status")
+        Metrics#RoomStatus: get("status")?.asText()?.replace(" ", "")
         Metrics#DeviceIp: get("device_ip")?.asText()
         Metrics#Camera: get("camera")
         Metrics#Microphone: get("microphone")
         Metrics#Speaker: get("speaker")
         Metrics#LastStartTime: get("last_start_time")
         Metrics#Health: get("health")
+        Metrics#Issues: get("issues")
   - model:
       name: AccountAlertSettings
       filter: get("room_id") == null

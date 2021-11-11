@@ -25,7 +25,6 @@ public class ZoomRoomsAggregatorCommunicatorTest {
         mockAggregatorCommunicator.setHost("api.zoom.us");
         mockAggregatorCommunicator.setProtocol("https");
         mockAggregatorCommunicator.setPort(443);
-        mockAggregatorCommunicator.internalInit();
         mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.authenticate();
     }
@@ -72,7 +71,13 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     @Test
     public void getDevicesWithDelayTest() throws Exception {
         mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(300000);
+        Thread.sleep(30000);
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
         List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Assert.assertFalse(devices.isEmpty());
         Assert.assertEquals(18, devices.size());

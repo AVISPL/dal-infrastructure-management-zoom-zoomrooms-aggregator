@@ -67,14 +67,19 @@ public class RoomStatusProcessor {
     /**
      * Get a list of issues from the Zoom API and transform it into a consistent map of status properties.
      *
-     * @param issuesList "issues" node from Zoom API. Essentially, just a Json string array
+     * @param issuesLine "issues" node from Zoom API. Essentially, just a comma-separated string of issues
      * @return {@code Map<String, String>} based on {@link #defaults} map
      */
-    public static Map<String, String> processIssuesList(JsonNode issuesList) {
+    public static Map<String, String> processIssuesList(String issuesLine) {
         Map<String, String> issues = new HashMap<>(defaults);
 
-        for(JsonNode value: issuesList) {
-            String status = knownStatusList.get(value.asText().toLowerCase());
+        if(StringUtils.isNullOrEmpty(issuesLine)) {
+            return issues;
+        }
+
+        String preparedLine = issuesLine.replace("[", "").replace("]", "").replace("\"", "");
+        for(String value: preparedLine.split(",")) {
+            String status = knownStatusList.get(value.trim().toLowerCase());
             if (!StringUtils.isNullOrEmpty(status)) {
                 String[] statusDetails = status.split(":");
                 issues.put(statusDetails[0], statusDetails[1]);
