@@ -6,7 +6,6 @@ models:
       filter: get("room_id") != null
       mapping:
         deviceType: Infrastructure
-        type: Infrastructure
         category: Management
         serialNumber: get("id")
         deviceId: get("room_id")
@@ -34,18 +33,19 @@ models:
         RoomUserDetails#UsePMI: get("use_pmi")
         RoomUserDetails#Timezone: get("timezone")
         RoomUserDetails#Status: get("status")
+        RoomUserDetails#Email: get("email") #use email to match meeting information from /metrics/meetings
         Metrics#RoomStatus: ''
         RoomUserDetails#PersonalMeetingURL: get("personal_meeting_url")
   - model:
       name: RoomDevice
       filter: get("room_id") == null
       properties:
-        Info#DeviceType: get("device_type")
-        Info#AppVersion: get("app_version")
-        Info#DeviceSystem: get("device_system")
-        Info#DeviceStatus: get("status")
+        DeviceType: get("device_type")?.asText()?.replaceAll(" ", "")
+        AppVersion: get("app_version")?.asText()
+        DeviceSystem: get("device_system")?.asText()
+        DeviceStatus: get("status")
         Metrics#RoomStatus: ''
-        Info#ID: get("id")
+        ID: get("id")
   - model:
       name: ZoomRoomMetrics
       filter: get("id") != null && get("device_ip") != null
@@ -62,72 +62,90 @@ models:
         Metrics#Health: get("health")
         Metrics#Issues: get("issues")
   - model:
+      name: ZoomRoomMeeting
+      filter: get("id") != null && get("start_time") != null
+      properties:
+        LiveMeeting#UUID: get("uuid")
+        LiveMeeting#ID: get("id")
+        LiveMeeting#Topic: get("topic")
+        LiveMeeting#Host: get("host")
+        LiveMeeting#StartTime: get("start_time")
+        LiveMeeting#Participants: get("participants")
+        LiveMeeting#HasPSTN: get("has_pstn")
+        LiveMeeting#HasArchiving: get("has_archiving")
+        LiveMeeting#HasVoip: get("has_voip")
+        LiveMeeting#Has3rdPartyAudio: get("has_3rd_party_audio")
+        LiveMeeting#HasVideo: get("has_video")
+        LiveMeeting#HasScreenShare: get("has_screen_share")
+        LiveMeeting#HasRecording: get("has_recording")
+        LiveMeeting#HasSIP: get("has_sip")
+  - model:
       name: AccountAlertSettings
       filter: get("room_id") == null
       statistics:
-        RoomControlsAlertSettings#DetectMicrophoneErrorAlert: 'false'
-        RoomControlsAlertSettings#DetectBluetoothMicrohponeErrorAlert: 'false'
-        RoomControlsAlertSettings#DetectSpeakerErrorAlert: 'false'
-        RoomControlsAlertSettings#DetectBluetoothSpeakerErrorAlert: 'false'
-        RoomControlsAlertSettings#DetectCameraErrorAlert: 'false'
-        RoomControlsAlertSettings#AudioNotMeetUsabilityThreshold: 'false'
-        RoomControlsAlertSettings#AudioMeetUsabilityThreshold: 'false'
-        RoomControlsAlertSettings#BatteryLowAndNotCharging: 'false'
-        RoomControlsAlertSettings#BatteryIsCharging: 'false'
+        AccountAlertSettings#DetectMicrophoneErrorAlert: 'false'
+        AccountAlertSettings#DetectBluetoothMicrohponeErrorAlert: 'false'
+        AccountAlertSettings#DetectSpeakerErrorAlert: 'false'
+        AccountAlertSettings#DetectBluetoothSpeakerErrorAlert: 'false'
+        AccountAlertSettings#DetectCameraErrorAlert: 'false'
+        AccountAlertSettings#AudioNotMeetUsabilityThreshold: 'false'
+        AccountAlertSettings#AudioMeetUsabilityThreshold: 'false'
+        AccountAlertSettings#BatteryLowAndNotCharging: 'false'
+        AccountAlertSettings#BatteryIsCharging: 'false'
 #        RoomControlsAlertSettings#BatteryPercentage: '0'
-        RoomControlsAlertSettings#ControllerSchedulingDisconnected: 'false'
-        RoomControlsAlertSettings#ControllerSchedulingReconnected: 'false'
-        RoomControlsAlertSettings#CpuUsageHighDetected: 'false'
-        RoomControlsAlertSettings#NetworkUnstableDetected: 'false'
-        RoomControlsAlertSettings#ZoomRoomOffline: 'false'
-        RoomControlsAlertSettings#ZoomRoomComeBackOnline: 'false'
-        RoomControlsAlertSettings#SipRegistrationFailed: 'false'
-        RoomControlsAlertSettings#SipRegistrationReEnabled: 'false'
-        RoomControlsAlertSettings#MicSpeakerCameraDisconnected: 'false'
-        RoomControlsAlertSettings#MicSpeakerCameraReconnected: 'false'
-        RoomControlsAlertSettings#ZoomRoomDisplayDisconnected: 'false'
+        AccountAlertSettings#ControllerSchedulingDisconnected: 'false'
+        AccountAlertSettings#ControllerSchedulingReconnected: 'false'
+        AccountAlertSettings#CpuUsageHighDetected: 'false'
+        AccountAlertSettings#NetworkUnstableDetected: 'false'
+        AccountAlertSettings#ZoomRoomOffline: 'false'
+        AccountAlertSettings#ZoomRoomComeBackOnline: 'false'
+        AccountAlertSettings#SipRegistrationFailed: 'false'
+        AccountAlertSettings#SipRegistrationReEnabled: 'false'
+        AccountAlertSettings#MicSpeakerCameraDisconnected: 'false'
+        AccountAlertSettings#MicSpeakerCameraReconnected: 'false'
+        AccountAlertSettings#ZoomRoomDisplayDisconnected: 'false'
       control:
-        RoomControlsAlertSettings#DetectMicrophoneErrorAlert:
+        AccountAlertSettings#DetectMicrophoneErrorAlert:
           type: Switch
           value: get("client_alert").get("detect_microphone_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#DetectBluetoothMicrohponeErrorAlert:
+        AccountAlertSettings#DetectBluetoothMicrohponeErrorAlert:
           type: Switch
           value: get("client_alert").get("detect_bluetooth_microphone_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#DetectSpeakerErrorAlert:
+        AccountAlertSettings#DetectSpeakerErrorAlert:
           type: Switch
           value: get("client_alert").get("detect_speaker_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#DetectBluetoothSpeakerErrorAlert:
+        AccountAlertSettings#DetectBluetoothSpeakerErrorAlert:
           type: Switch
           value: get("client_alert").get("detect_bluetooth_speaker_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#DetectCameraErrorAlert:
+        AccountAlertSettings#DetectCameraErrorAlert:
           type: Switch
           value: get("client_alert").get("detect_camera_error_alert")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#AudioNotMeetUsabilityThreshold:
+        AccountAlertSettings#AudioNotMeetUsabilityThreshold:
           type: Switch
           value: get("notification").get("audio_not_meet_usability_threshold")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#AudioMeetUsabilityThreshold:
+        AccountAlertSettings#AudioMeetUsabilityThreshold:
           type: Switch
           value: get("notification").get("audio_meet_usability_threshold")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#BatteryLowAndNotCharging:
+        AccountAlertSettings#BatteryLowAndNotCharging:
           type: Switch
           value: get("notification").get("battery_low_and_not_charging")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#BatteryIsCharging:
+        AccountAlertSettings#BatteryIsCharging:
           type: Switch
           value: get("notification").get("battery_is_charging")?.asText()
           labelOn: 'On'
@@ -135,57 +153,57 @@ models:
 #        RoomControlsAlertSettings#BatteryPercentage:
 #          type: Numeric
 #          value: get("notification").get("battery_percentage")?.asInt()
-        RoomControlsAlertSettings#ControllerSchedulingDisconnected:
+        AccountAlertSettings#ControllerSchedulingDisconnected:
           type: Switch
           value: get("notification").get("controller_scheduling_disconnected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#ControllerSchedulingReconnected:
+        AccountAlertSettings#ControllerSchedulingReconnected:
           type: Switch
           value: get("notification").get("controller_scheduling_reconnected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#CpuUsageHighDetected:
+        AccountAlertSettings#CpuUsageHighDetected:
           type: Switch
           value: get("notification").get("cpu_usage_high_detected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#NetworkUnstableDetected:
+        AccountAlertSettings#NetworkUnstableDetected:
           type: Switch
           value: get("notification").get("network_unstable_detected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#ZoomRoomOffline:
+        AccountAlertSettings#ZoomRoomOffline:
           type: Switch
           value: get("notification").get("zoom_room_offline")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#ZoomRoomComeBackOnline:
+        AccountAlertSettings#ZoomRoomComeBackOnline:
           type: Switch
           value: get("notification").get("zoom_room_come_back_online")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#SipRegistrationFailed:
+        AccountAlertSettings#SipRegistrationFailed:
           type: Switch
           value: get("notification").get("sip_registration_failed")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#SipRegistrationReEnabled:
+        AccountAlertSettings#SipRegistrationReEnabled:
           type: Switch
           value: get("notification").get("sip_registration_re_enabled")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#MicSpeakerCameraDisconnected:
+        AccountAlertSettings#MicSpeakerCameraDisconnected:
           type: Switch
           value: get("notification").get("mic_speaker_camera_disconnected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#MicSpeakerCameraReconnected:
+        AccountAlertSettings#MicSpeakerCameraReconnected:
           type: Switch
           value: get("notification").get("mic_speaker_camera_reconnected")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-        RoomControlsAlertSettings#ZoomRoomDisplayDisconnected:
+        AccountAlertSettings#ZoomRoomDisplayDisconnected:
           type: Switch
           value: get("notification").get("zoom_room_display_disconnected")?.asText()
           labelOn: 'On'
