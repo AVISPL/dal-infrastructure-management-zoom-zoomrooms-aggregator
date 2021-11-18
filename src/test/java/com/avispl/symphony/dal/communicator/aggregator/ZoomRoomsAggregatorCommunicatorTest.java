@@ -11,6 +11,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.platform.commons.util.StringUtils;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -70,15 +75,24 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void getDevicesWithDelayTest() throws Exception {
-        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        List<AggregatedDevice> devices;
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);
-        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);
-        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);
-        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);
-        List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Assert.assertFalse(devices.isEmpty());
         Assert.assertEquals(18, devices.size());
         Assert.assertNotNull(devices.get(0).getSerialNumber());
