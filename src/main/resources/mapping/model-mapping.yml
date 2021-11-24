@@ -5,16 +5,15 @@ models:
       node: rooms
       filter: get("room_id") != null
       mapping:
-        deviceType: Infrastructure
-        category: Management
+        deviceType: Computer
+        category: Zoom Rooms
         serialNumber: get("id")
         deviceId: get("room_id")
         deviceName: get("name")
-        deviceMake: Zoom
-        deviceModel: Zoom Room
+        deviceMake: "Other"
+        deviceModel: "Unknown"
         deviceOnline: get("status")?.asText().equals("Offline") != true
       properties:
-        LocationId: get("location_id")
         Metrics#RoomStatus: get("status")?.asText()?.replace(" ", "")
   - model:
       name: RoomLocation
@@ -23,7 +22,6 @@ models:
         Location#ID: get("id")
         Location#Name: get("name")
         Location#Type: get("type")
-        Location#ParentLocationID: get("parent_location_id")
   - model:
       name: RoomUserDetails
       filter: get("room_id") == null
