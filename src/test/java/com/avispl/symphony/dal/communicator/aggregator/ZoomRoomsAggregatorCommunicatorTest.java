@@ -74,6 +74,34 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     }
 
     @Test
+    public void getDevicesWithLocationsFilteringTest() throws Exception {
+        mockAggregatorCommunicator.setDisplayRoomSettings(true);
+        mockAggregatorCommunicator.setZoomRoomLocations("Chicago,Colorado");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
+        List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(6, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
+
+        mockAggregatorCommunicator.setZoomRoomLocations("Chicago");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(4, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
+
+        mockAggregatorCommunicator.setZoomRoomLocations(null);
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(18, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
+    }
+
+    @Test
     public void getDevicesWithDelayTest() throws Exception {
         mockAggregatorCommunicator.setMetricsRetrievalTimeout(60000);
         mockAggregatorCommunicator.setDisplayRoomSettings(true);

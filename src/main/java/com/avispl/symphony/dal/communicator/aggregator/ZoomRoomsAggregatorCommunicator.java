@@ -800,22 +800,30 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
         }
 
-        List<AggregatedDevice> zoomRooms = aggregatedDeviceProcessor.extractDevices(retrieveZoomRooms());
+        List<AggregatedDevice> zoomRooms = new ArrayList<>();
+        if (!supportedLocationIds.isEmpty()) {
+            supportedLocationIds.forEach(locationId -> {
+                try {
+                    zoomRooms.addAll(aggregatedDeviceProcessor.extractDevices(retrieveZoomRooms(locationId)));
+                } catch (Exception e) {
+                    logger.error("Unable to retrieve Zoom Room entries by given locationId: " + locationId, e);
+                }
+            });
+        } else {
+            zoomRooms.addAll(aggregatedDeviceProcessor.extractDevices(retrieveZoomRooms(null)));
+        }
 
         zoomRooms.forEach(aggregatedDevice -> {
-            Map<String, String> properties = aggregatedDevice.getProperties();
-            if (StringUtils.isNullOrEmpty(zoomRoomLocations) || !StringUtils.isNullOrEmpty(zoomRoomLocations) && supportedLocationIds.contains(properties.get(LOCATION_ID_PROPERTY))) {
-                if (aggregatedDevices.containsKey(aggregatedDevice.getDeviceId())) {
-                    aggregatedDevices.get(aggregatedDevice.getDeviceId()).setDeviceOnline(aggregatedDevice.getDeviceOnline());
-                } else {
-                    aggregatedDevices.put(aggregatedDevice.getDeviceId(), aggregatedDevice);
-                }
+            if (aggregatedDevices.containsKey(aggregatedDevice.getDeviceId())) {
+                aggregatedDevices.get(aggregatedDevice.getDeviceId()).setDeviceOnline(aggregatedDevice.getDeviceOnline());
             } else {
-                aggregatedDevices.remove(aggregatedDevice.getDeviceId());
+                aggregatedDevices.put(aggregatedDevice.getDeviceId(), aggregatedDevice);
             }
-
-            properties.remove(LOCATION_ID_PROPERTY);
         });
+
+        // Remove rooms that were not populated by the API
+        List<String> retrievedRoomIds = zoomRooms.stream().map(AggregatedDevice::getDeviceId).collect(Collectors.toList());
+        aggregatedDevices.keySet().removeIf(existingDevice -> !retrievedRoomIds.contains(existingDevice));
 
         if (zoomRooms.isEmpty()) {
             // If all the devices were not populated for any specific reason (no devices available, filtering, etc)
@@ -873,10 +881,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @return response JsonNode
      * @throws Exception if a communication error occurs
      */
-    private JsonNode retrieveZoomRooms() throws Exception {
+    private JsonNode retrieveZoomRooms(String locationId) throws Exception {
         StringBuilder queryString = new StringBuilder();
         if (!StringUtils.isNullOrEmpty(zoomRoomTypes)) {
             queryString.append("&type=").append(zoomRoomTypes);
+        }
+        if (!StringUtils.isNullOrEmpty(locationId)) {
+            queryString.append("&location_id=").append(locationId);
         }
         return doGetWithRetry(ZOOM_ROOMS_URL + queryString.toString());
     }
