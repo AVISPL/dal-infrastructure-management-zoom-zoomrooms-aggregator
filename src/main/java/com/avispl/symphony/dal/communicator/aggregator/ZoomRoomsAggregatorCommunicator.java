@@ -191,19 +191,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private String aggregatorProperties;
     private String authorizationToken;
 
-    /** Whether service is running. */
+    /**
+     * Whether service is running.
+     */
     private volatile boolean serviceRunning;
 
     /**
      * Triggers visibility of Room property groups:
      * RoomControlsAlertSettings, RoomControlsMeetingSettings
-     * */
+     */
     private boolean displayRoomSettings;
 
     /**
      * Triggers visibility of Aggregator property groups:
      * AccountAlertSettings, AccountMeetingSettings
-     * */
+     */
     private boolean displayAccountSettings;
 
     /**
@@ -277,19 +279,19 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Map of roomUserId:timestamp within which the room user details cannot be refreshed.
      * Ignored if the data is not yet retrieved for the room
      */
-    private ConcurrentHashMap<String, Long>  validUserDetailsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, Long> validUserDetailsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
 
     /**
      * Map of roomId:timestamp within which the room settings cannot be refreshed.
      * Ignored if the data is not yet retrieved for the room
      */
-    private ConcurrentHashMap<String, Long>  validRoomSettingsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, Long> validRoomSettingsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
 
     /**
      * Map of roomId:timestamp within which the registered room devices details cannot be refreshed.
      * Ignored if the data is not yet retrieved for the room
      */
-    private ConcurrentHashMap<String, Long>  validRoomDevicesDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, Long> validRoomDevicesDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
 
     /**
      * We don't want the statistics to be collected constantly, because if there's not a big list of devices -
@@ -632,7 +634,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 
         List<AdvancedControllableProperty> accountSettingsControls = new ArrayList<>();
-        if(displayAccountSettings) {
+        if (displayAccountSettings) {
             aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
             aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
 
@@ -910,10 +912,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      *
      * @param url to retrieve data from
      * @return JsonNode response body
-     *
      * @throws Exception if a communication error occurs
-     * */
-    private JsonNode doGetWithRetry (String url) throws Exception {
+     */
+    private JsonNode doGetWithRetry(String url) throws Exception {
         int retryAttempts = 0;
         Exception lastError = null;
 
@@ -996,7 +997,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      *
      * @param roomUserId id of the room user to populate properties for for
      * @param properties map to add statistics to
-     * */
+     */
     private void populateRoomUserDetails(String roomUserId, Map<String, String> properties) throws Exception {
         Long dataRetrievalTimestamp = validUserDetailsDataRetrievalPeriodTimestamps.get(roomUserId);
         long roomUserDetailsProperties = properties.keySet().stream().filter(s -> s.startsWith(ROOM_USER_DETAILS_GROUP)).count();
@@ -1025,10 +1026,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Add room settings controls to device's properties. Check if retrieval is relevant based on {@link #validRoomDevicesDataRetrievalPeriodTimestamps}
      * value, stored with the {@param roomId}.
      *
-     * @param roomId id of the room to populate settings for
-     * @param properties map to add statistics to
+     * @param roomId                 id of the room to populate settings for
+     * @param properties             map to add statistics to
      * @param controllableProperties list of controllable properties, to add controls to
-     * */
+     */
     private void populateRoomSettings(String roomId, Map<String, String> properties, List<AdvancedControllableProperty> controllableProperties) throws Exception {
         Long dataRetrievalTimestamp = validRoomSettingsDataRetrievalPeriodTimestamps.get(roomId);
         long roomSettingsProperties = properties.keySet().stream().filter(s -> s.startsWith(ROOM_CONTROLS_ALERT_SETTINGS_GROUP) || s.startsWith(ROOM_CONTROLS_MEETING_SETTINGS_GROUP)).count();
@@ -1039,7 +1040,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             return;
         }
-        if(!displayRoomSettings) {
+        if (!displayRoomSettings) {
             if (logger.isDebugEnabled()) {
                 logger.debug("Room settings retrieval is switched off by displayRoomSettings property.");
             }
@@ -1094,14 +1095,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
-         * Types of devices: ZoomRoomsComputer, Controller, SchedulingDisplay, ZoomRoomsControlSystem, CompanionWhiteboard
+     * Types of devices: ZoomRoomsComputer, Controller, SchedulingDisplay, ZoomRoomsControlSystem, CompanionWhiteboard
      * Retrieve registered zoom room devices information, group it by type.
      * Calculate number of online/offline devices, display online/offline devices operating systems and app versions.
      *
-     * @param roomId to get devices for
+     * @param roomId     to get devices for
      * @param properties to save properties to
      * @throws Exception if any error occurs
-     * */
+     */
     private void retrieveGroupedRoomDevicesInformation(String roomId, Map<String, String> properties) throws Exception {
         Long dataRetrievalTimestamp = validRoomDevicesDataRetrievalPeriodTimestamps.get(roomId);
         long roomDevicesProperties = properties.keySet().stream().filter(s -> s.startsWith("RoomDevices_")).count();
@@ -1139,7 +1140,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 List<String> offlineDeviceSystems = new ArrayList<>();
                 int onlineDevicesTotal = 0;
                 int offlineDevicesTotal = 0;
-                for (Map<String, String> props: value) {
+                for (Map<String, String> props : value) {
                     String appVersion = props.get(APP_VERSION_PROPERTY);
                     String deviceSystem = props.get(DEVICE_SYSTEM_PROPERTY);
                     if (Objects.equals("Online", props.get(DEVICE_STATUS_PROPERTY))) {
@@ -1173,7 +1174,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      * Create a list of RoomControls based on room status and save them to properties
      *
-     * @param properties map to save statistics values to
+     * @param properties             map to save statistics values to
      * @param controllableProperties list to save controllable properties to
      */
     private void createRoomControls(Map<String, String> properties, List<AdvancedControllableProperty> controllableProperties) {
@@ -1264,7 +1265,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         try {
             JsonNode roomsMetrics = doGet(ZOOM_ROOMS_METRICS, JsonNode.class);
             if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("zoom_rooms")) {
-                for(JsonNode metric: roomsMetrics.get("zoom_rooms")) {
+                for (JsonNode metric : roomsMetrics.get("zoom_rooms")) {
                     Map<String, String> metricsData = new HashMap<>();
                     aggregatedDeviceProcessor.applyProperties(metricsData, metric, "ZoomRoomMetrics");
                     zoomRoomsMetricsData.put(metric.get("id").asText(), metricsData);
@@ -1391,13 +1392,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      * Remove an entry from the specified map, if key starts with one of the options provided
      *
-     * @param properties map to remove property from
+     * @param properties    map to remove property from
      * @param propertyNames options to use when defining which properties to remove
      */
     private void cleanupStaleProperties(Map<String, String> properties, String... propertyNames) {
         properties.keySet().removeIf(s -> {
-            for (String propertyName: propertyNames) {
-                return s.startsWith(propertyName);
+            for (String propertyName : propertyNames) {
+                if (s.startsWith(propertyName)) {
+                    return true;
+                }
             }
             return false;
         });
@@ -1407,12 +1410,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Remove an entry from the specified list of controllable ptoperties, if property name starts with one of the options provided
      *
      * @param advancedControllableProperties list to remove object from
-     * @param controlNames options to use when defining which properties to remove
+     * @param controlNames                   options to use when defining which properties to remove
      */
     private void cleanupStaleControls(List<AdvancedControllableProperty> advancedControllableProperties, String... controlNames) {
         advancedControllableProperties.removeIf(advancedControllableProperty -> {
-            for (String controlName: controlNames) {
-                return advancedControllableProperty.getName().startsWith(controlName);
+            for (String controlName : controlNames) {
+                if (advancedControllableProperty.getName().startsWith(controlName)) {
+                    return true;
+                }
             }
             return false;
         });
@@ -1468,7 +1473,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      *
      * @param value raw object coming from Symphony
      * @return {@link String} value of 'true' or 'false' based on the initial value
-     * */
+     */
     private String normalizeSettingData(Object value) {
         return "0".equals(String.valueOf(value)) ? "false" : "true";
     }
