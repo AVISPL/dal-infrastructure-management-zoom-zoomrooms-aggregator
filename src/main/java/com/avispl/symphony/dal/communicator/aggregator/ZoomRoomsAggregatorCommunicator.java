@@ -45,7 +45,10 @@ import static com.avispl.symphony.dal.communicator.aggregator.properties.Propert
 public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements Aggregator, Monitorable, Controller {
 
     /**
+     * Process that is running constantly and triggers collecting data from Zoom API endpoints, based on the given timeouts and thresholds.
      *
+     * @author Maksym.Rossiytsev
+     * @since 1.0.0
      */
     class ZoomRoomsDeviceDataLoader implements Runnable {
         private volatile boolean inProgress;
@@ -114,7 +117,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 try {
                     // The following request collect all the information, so in order to save number of requests, which is
                     // daily limited for certain APIs, we need to request them once per monitoring cycle.
-                    // TODO: consider adding static/configurable timeout
                     retrieveZoomRoomMetrics();
                 } catch (Exception e) {
                     logger.error("Error occurred during ZoomRooms metrics retrieval: " + e.getMessage() + " with cause: " + e.getCause().getMessage());
@@ -195,21 +197,101 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private volatile boolean serviceRunning;
 
     /**
-     * If the {@link ZoomRoomsAggregatorCommunicator#deviceMetaDataInformationRetrievalTimeout} is set to a value that is too small -
+     * Triggers visibility of Room property groups:
+     * RoomControlsAlertSettings, RoomControlsMeetingSettings
+     * */
+    private boolean displayRoomSettings;
+
+    /**
+     * Triggers visibility of Aggregator property groups:
+     * AccountAlertSettings, AccountMeetingSettings
+     * */
+    private boolean displayAccountSettings;
+
+    /**
+     * If the {@link ZoomRoomsAggregatorCommunicator#deviceMetaDataRetrievalTimeout} is set to a value that is too small -
      * devices list will be fetched too frequently. In order to avoid this - the minimal value is based on this value.
      */
     private static final long defaultMetaDataTimeout = 60 * 1000 / 2;
 
     /**
+     * If the {@link ZoomRoomsAggregatorCommunicator#metricsRetrievalTimeout} is set to a value that is too small -
+     * devices metrics will be fetched too frequently. In order to avoid this - the minimal value is based on this value.
+     */
+    private static final long defaultMetricsTimeout = 60 * 1000 / 2;
+
+    /**
+     * If the {@link ZoomRoomsAggregatorCommunicator#roomUserDetailsRetrievalTimeout} is set to a value that is too small -
+     * devices user details will be fetched too frequently. In order to avoid this - the minimal value is based on this value.
+     */
+    private static final long defaultUserDetailsTimeout = 60 * 1000 / 2;
+
+    /**
+     * If the {@link ZoomRoomsAggregatorCommunicator#roomSettingsRetrievalTimeout} is set to a value that is too small -
+     * devices settings will be fetched too frequently. In order to avoid this - the minimal value is based on this value.
+     */
+    private static final long defaultRoomSettingsTimeout = 60 * 1000 / 2;
+
+    /**
+     * If the {@link ZoomRoomsAggregatorCommunicator#roomDevicesRetrievalTimeout} is set to a value that is too small -
+     * room devices will be fetched too frequently. In order to avoid this - the minimal value is based on this value.
+     */
+    private static final long defaultRoomDevicesTimeout = 60 * 1000 / 2;
+
+    /**
      * Device metadata retrieval timeout. The general devices list is retrieved once during this time period.
      */
-    private long deviceMetaDataInformationRetrievalTimeout = 60 * 1000 / 2; // TODO add another one for Metrics?
+    private long deviceMetaDataRetrievalTimeout = 60 * 1000 / 2;
+
+    /**
+     * Device metrics retrieval timeout. The general devices list is retrieved once during this time period.
+     */
+    private long metricsRetrievalTimeout = 60 * 1000 / 2;
+
+    /**
+     * Room user details retrieval timeout. Info is retrieved once during this time period.
+     */
+    private long roomUserDetailsRetrievalTimeout = 60 * 1000 / 2;
+
+    /**
+     * Room settings retrieval timeout. Info is retrieved once during this time period.
+     */
+    private long roomSettingsRetrievalTimeout = 60 * 1000 / 2;
+
+    /**
+     * Registered room devices retrieval timeout. Info is retrieved once during this time period.
+     */
+    private long roomDevicesRetrievalTimeout = 60 * 1000 / 2;
 
     /**
      * Time period within which the device metadata (basic devices information) cannot be refreshed.
-     * If ignored if device list is not yet retrieved or the cached device list is empty {@link ZoomRoomsAggregatorCommunicator#aggregatedDevices}
+     * Ignored if device list is not yet retrieved or the cached device list is empty {@link ZoomRoomsAggregatorCommunicator#aggregatedDevices}
      */
     private volatile long validDeviceMetaDataRetrievalPeriodTimestamp;
+
+    /**
+     * Time period within which the device metrics (dynamic information) cannot be refreshed.
+     * Ignored if metrics data is not yet retrieved
+     */
+    private volatile long validMetricsDataRetrievalPeriodTimestamp;
+
+    /**
+     * Map of roomUserId:timestamp within which the room user details cannot be refreshed.
+     * Ignored if the data is not yet retrieved for the room
+     */
+    private ConcurrentHashMap<String, Long>  validUserDetailsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
+
+    /**
+     * Map of roomId:timestamp within which the room settings cannot be refreshed.
+     * Ignored if the data is not yet retrieved for the room
+     */
+    private ConcurrentHashMap<String, Long>  validRoomSettingsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
+
+    /**
+     * Map of roomId:timestamp within which the registered room devices details cannot be refreshed.
+     * Ignored if the data is not yet retrieved for the room
+     */
+    private ConcurrentHashMap<String, Long>  validRoomDevicesDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
 
     /**
      * We don't want the statistics to be collected constantly, because if there's not a big list of devices -
@@ -246,21 +328,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private ZoomRoomsDeviceDataLoader deviceDataLoader;
 
     /**
-     * Retrieves {@code {@link #deviceMetaDataInformationRetrievalTimeout}}
+     * Retrieves {@code {@link #deviceMetaDataRetrievalTimeout }}
      *
-     * @return value of {@link #deviceMetaDataInformationRetrievalTimeout}
+     * @return value of {@link #deviceMetaDataRetrievalTimeout}
      */
-    public long getDeviceMetaDataInformationRetrievalTimeout() {
-        return deviceMetaDataInformationRetrievalTimeout;
+    public long getDeviceMetaDataRetrievalTimeout() {
+        return deviceMetaDataRetrievalTimeout;
     }
 
     /**
      * Sets {@code deviceMetaDataInformationRetrievalTimeout}
      *
-     * @param deviceMetaDataInformationRetrievalTimeout the {@code long} field
+     * @param deviceMetaDataRetrievalTimeout the {@code long} field
      */
-    public void setDeviceMetaDataInformationRetrievalTimeout(long deviceMetaDataInformationRetrievalTimeout) {
-        this.deviceMetaDataInformationRetrievalTimeout = deviceMetaDataInformationRetrievalTimeout;
+    public void setDeviceMetaDataRetrievalTimeout(long deviceMetaDataRetrievalTimeout) {
+        this.deviceMetaDataRetrievalTimeout = deviceMetaDataRetrievalTimeout;
     }
 
     /**
@@ -336,6 +418,114 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
+     * Retrieves {@code {@link #metricsRetrievalTimeout}}
+     *
+     * @return value of {@link #metricsRetrievalTimeout}
+     */
+    public long getMetricsRetrievalTimeout() {
+        return metricsRetrievalTimeout;
+    }
+
+    /**
+     * Sets {@code metricsRetrievalTimeout}
+     *
+     * @param metricsRetrievalTimeout the {@code long} field
+     */
+    public void setMetricsRetrievalTimeout(long metricsRetrievalTimeout) {
+        this.metricsRetrievalTimeout = metricsRetrievalTimeout;
+    }
+
+    /**
+     * Retrieves {@code {@link #roomUserDetailsRetrievalTimeout }}
+     *
+     * @return value of {@link #roomUserDetailsRetrievalTimeout}
+     */
+    public long getRoomUserDetailsRetrievalTimeout() {
+        return roomUserDetailsRetrievalTimeout;
+    }
+
+    /**
+     * Sets {@code userDetailsRetrievalTimeout}
+     *
+     * @param roomUserDetailsRetrievalTimeout the {@code long} field
+     */
+    public void setRoomUserDetailsRetrievalTimeout(long roomUserDetailsRetrievalTimeout) {
+        this.roomUserDetailsRetrievalTimeout = roomUserDetailsRetrievalTimeout;
+    }
+
+    /**
+     * Retrieves {@code {@link #roomSettingsRetrievalTimeout}}
+     *
+     * @return value of {@link #roomSettingsRetrievalTimeout}
+     */
+    public long getRoomSettingsRetrievalTimeout() {
+        return roomSettingsRetrievalTimeout;
+    }
+
+    /**
+     * Sets {@code roomSettingsRetrievalTimeout}
+     *
+     * @param roomSettingsRetrievalTimeout the {@code long} field
+     */
+    public void setRoomSettingsRetrievalTimeout(long roomSettingsRetrievalTimeout) {
+        this.roomSettingsRetrievalTimeout = roomSettingsRetrievalTimeout;
+    }
+
+    /**
+     * Retrieves {@code {@link #roomDevicesRetrievalTimeout}}
+     *
+     * @return value of {@link #roomDevicesRetrievalTimeout}
+     */
+    public long getRoomDevicesRetrievalTimeout() {
+        return roomDevicesRetrievalTimeout;
+    }
+
+    /**
+     * Sets {@code roomDevicesRetrievalTimeout}
+     *
+     * @param roomDevicesRetrievalTimeout the {@code long} field
+     */
+    public void setRoomDevicesRetrievalTimeout(long roomDevicesRetrievalTimeout) {
+        this.roomDevicesRetrievalTimeout = roomDevicesRetrievalTimeout;
+    }
+
+    /**
+     * Retrieves {@code {@link #displayRoomSettings}}
+     *
+     * @return value of {@link #displayRoomSettings}
+     */
+    public boolean isDisplayRoomSettings() {
+        return displayRoomSettings;
+    }
+
+    /**
+     * Sets {@code displayRoomSettings}
+     *
+     * @param displayRoomSettings the {@code boolean} field
+     */
+    public void setDisplayRoomSettings(boolean displayRoomSettings) {
+        this.displayRoomSettings = displayRoomSettings;
+    }
+
+    /**
+     * Retrieves {@code {@link #displayAccountSettings}}
+     *
+     * @return value of {@link #displayAccountSettings}
+     */
+    public boolean isDisplayAccountSettings() {
+        return displayAccountSettings;
+    }
+
+    /**
+     * Sets {@code displayAccountSettings}
+     *
+     * @param displayAccountSettings the {@code boolean} field
+     */
+    public void setDisplayAccountSettings(boolean displayAccountSettings) {
+        this.displayAccountSettings = displayAccountSettings;
+    }
+
+    /**
      * Build an instance of ZoomRoomsAggregatorCommunicator
      * Setup aggregated devices processor, initialize adapter properties
      *
@@ -378,7 +568,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         // BatteryPercentage is a Numeric controllable property
                         settingValue = String.valueOf(value);
                     } else {
-                        settingValue = "0".equals(String.valueOf(value)) ? "false" : "true";
+                        settingValue = normalizeSettingData(value);
                     }
                     updateRoomSetting(roomId, setting.getSettingName(), settingValue, setting.getSettingType(), setting.getParentNode());
                     controlValidated = true;
@@ -388,7 +578,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     if (setting == null) {
                         throw new IllegalArgumentException("Invalid property name provided: " + property);
                     }
-                    String settingValue = "0".equals(String.valueOf(value)) ? "false" : "true";
+                    String settingValue = normalizeSettingData(value);
                     updateAccountSettings(setting.getSettingName(), settingValue, setting.getSettingType(), setting.getParentNode());
                     controlValidated = true;
                     return;
@@ -444,18 +634,20 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 
         List<AdvancedControllableProperty> accountSettingsControls = new ArrayList<>();
-        aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
-        aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
+        if(displayAccountSettings) {
+            aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
+            aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
 
 //        // if the property isn't there - we should not display this control and its label
-        accountSettingsControls.removeIf(advancedControllableProperty -> {
-            String value = String.valueOf(advancedControllableProperty.getValue());
-            if (StringUtils.isNullOrEmpty(value)) {
-                statistics.remove(advancedControllableProperty.getName());
-                return true;
-            }
-            return false;
-        });
+            accountSettingsControls.removeIf(advancedControllableProperty -> {
+                String value = String.valueOf(advancedControllableProperty.getValue());
+                if (StringUtils.isNullOrEmpty(value)) {
+                    statistics.remove(advancedControllableProperty.getName());
+                    return true;
+                }
+                return false;
+            });
+        }
 
         statistics.put("AdapterVersion", adapterProperties.getProperty("mock.aggregator.version"));
         statistics.put("AdapterBuildDate", adapterProperties.getProperty("mock.aggregator.build.date"));
@@ -501,6 +693,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         devicesExecutionPool.clear();
 
         aggregatedDevices.clear();
+        zoomRoomsMetricsData.clear();
+        validUserDetailsDataRetrievalPeriodTimestamps.clear();
+        validRoomDevicesDataRetrievalPeriodTimestamps.clear();
+        validRoomSettingsDataRetrievalPeriodTimestamps.clear();
         super.internalDestroy();
     }
 
@@ -586,7 +782,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             return;
         }
-        validDeviceMetaDataRetrievalPeriodTimestamp = System.currentTimeMillis() + Math.max(defaultMetaDataTimeout, deviceMetaDataInformationRetrievalTimeout);
+        validDeviceMetaDataRetrievalPeriodTimestamp = System.currentTimeMillis() + Math.max(defaultMetaDataTimeout, deviceMetaDataRetrievalTimeout);
 
         List<String> supportedLocationIds = new ArrayList<>();
         if (!StringUtils.isNullOrEmpty(zoomRoomLocations)) {
@@ -732,7 +928,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 break;
             }
             TimeUnit.MILLISECONDS.sleep(200);
-            System.out.println("Retry attempt for " + url);
         }
 
         if (retryAttempts == 10 && serviceRunning) {
@@ -749,30 +944,102 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private void populateDeviceDetails(String roomId) throws Exception {
-        Map<String, String> properties = new HashMap<>();
         AggregatedDevice aggregatedZoomRoomDevice = aggregatedDevices.get(roomId);
 
         if (aggregatedZoomRoomDevice == null) {
             return;
         }
+        // To restore properties that were here before, but to override the rest
+        Map<String, String> properties = new HashMap<>(aggregatedZoomRoomDevice.getProperties());
 
         properties.put(METRICS_ROOM_STATUS, aggregatedZoomRoomDevice.getProperties().get(METRICS_ROOM_STATUS));
 
         Map<String, String> roomMetricsProperties = zoomRoomsMetricsData.get(roomId);
 
         if (roomMetricsProperties != null) {
+            cleanupStaleProperties(properties, ROOM_STATUS_GROUP);
+
+            Map<String, String> processedMetricsProperties = new HashMap<>();
             Map<String, String> roomIssues = RoomStatusProcessor.processIssuesList(roomMetricsProperties.get(METRICS_ISSUES));
-            roomIssues.forEach((key, value) -> roomMetricsProperties.put(ROOM_STATUS_GROUP + key, value));
-            roomMetricsProperties.remove(METRICS_ISSUES);
+            roomIssues.forEach((key, value) -> processedMetricsProperties.put(ROOM_STATUS_GROUP + key, value));
+
+            properties.putAll(processedMetricsProperties);
             properties.putAll(roomMetricsProperties);
+            properties.remove(METRICS_ISSUES);
         }
 
-        JsonNode roomUserDetails = retrieveUserDetails(aggregatedZoomRoomDevice.getSerialNumber());
+        populateRoomUserDetails(aggregatedZoomRoomDevice.getSerialNumber(), properties);
+
+        List<AdvancedControllableProperty> controllableProperties = aggregatedZoomRoomDevice.getControllableProperties();
+
+        populateRoomSettings(roomId, properties, controllableProperties);
+        retrieveGroupedRoomDevicesInformation(roomId, properties);
+        createRoomControls(properties, controllableProperties);
+
+        aggregatedZoomRoomDevice.setProperties(properties);
+        aggregatedZoomRoomDevice.setControllableProperties(controllableProperties);
+        aggregatedZoomRoomDevice.setTimestamp(System.currentTimeMillis());
+    }
+
+    /**
+     * Add room user settings to device's properties. Check if retrieval is relevant based on {@link #validUserDetailsDataRetrievalPeriodTimestamps}
+     * value, stored with the {@param roomUserId}.
+     *
+     * @param roomUserId id of the room user to populate properties for for
+     * @param properties map to add statistics to
+     * */
+    private void populateRoomUserDetails(String roomUserId, Map<String, String> properties) throws Exception {
+        Long dataRetrievalTimestamp = validUserDetailsDataRetrievalPeriodTimestamps.get(roomUserId);
+        long roomUserDetailsProperties = properties.keySet().stream().filter(s -> s.startsWith(ROOM_USER_DETAILS_GROUP)).count();
+        if (roomUserDetailsProperties > 0 && dataRetrievalTimestamp != null &&
+                dataRetrievalTimestamp > System.currentTimeMillis()) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(String.format("Room User details retrieval is in cooldown. %s seconds left",
+                        (dataRetrievalTimestamp - System.currentTimeMillis()) / 1000));
+            }
+            return;
+        }
+        validUserDetailsDataRetrievalPeriodTimestamps.put(roomUserId, System.currentTimeMillis() + Math.max(defaultUserDetailsTimeout, roomUserDetailsRetrievalTimeout));
+
+        JsonNode roomUserDetails = retrieveUserDetails(roomUserId);
         Map<String, String> roomUserProperties = new HashMap<>();
+
+        cleanupStaleProperties(properties, ROOM_USER_DETAILS_GROUP);
+
         if (roomUserDetails != null) {
             aggregatedDeviceProcessor.applyProperties(roomUserProperties, roomUserDetails, "RoomUserDetails");
+            properties.putAll(roomUserProperties);
         }
-        properties.putAll(roomUserProperties);
+    }
+
+    /**
+     * Add room settings controls to device's properties. Check if retrieval is relevant based on {@link #validRoomDevicesDataRetrievalPeriodTimestamps}
+     * value, stored with the {@param roomId}.
+     *
+     * @param roomId id of the room to populate settings for
+     * @param properties map to add statistics to
+     * @param controllableProperties list of controllable properties, to add controls to
+     * */
+    private void populateRoomSettings(String roomId, Map<String, String> properties, List<AdvancedControllableProperty> controllableProperties) throws Exception {
+        Long dataRetrievalTimestamp = validRoomSettingsDataRetrievalPeriodTimestamps.get(roomId);
+        long roomSettingsProperties = properties.keySet().stream().filter(s -> s.startsWith(ROOM_CONTROLS_ALERT_SETTINGS_GROUP) || s.startsWith(ROOM_CONTROLS_MEETING_SETTINGS_GROUP)).count();
+        if ((roomSettingsProperties > 0 && dataRetrievalTimestamp != null && dataRetrievalTimestamp > System.currentTimeMillis())) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(String.format("Room settings retrieval is in cooldown. %s seconds left",
+                        (dataRetrievalTimestamp - System.currentTimeMillis()) / 1000));
+            }
+            return;
+        }
+        if(!displayRoomSettings) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Room settings retrieval is switched off by displayRoomSettings property.");
+            }
+            return;
+        }
+        validRoomSettingsDataRetrievalPeriodTimestamps.put(roomId, System.currentTimeMillis() + Math.max(defaultRoomSettingsTimeout, roomSettingsRetrievalTimeout));
+
+        cleanupStaleProperties(properties, ROOM_CONTROLS_ALERT_SETTINGS_GROUP, ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
+        cleanupStaleControls(controllableProperties, ROOM_CONTROLS_ALERT_SETTINGS_GROUP, ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
 
         Map<String, String> settingsProperties = new HashMap<>();
         List<AdvancedControllableProperty> settingsControls = new ArrayList<>();
@@ -814,19 +1081,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         });
 
         properties.putAll(settingsProperties);
-
-        retrieveGroupedRoomDevicesInformation(roomId, properties);
-
-        List<AdvancedControllableProperty> controllableProperties = new ArrayList<>(settingsControls);
-        createRoomControls(properties, controllableProperties);
-
-        aggregatedZoomRoomDevice.setProperties(properties);
-        aggregatedZoomRoomDevice.setControllableProperties(controllableProperties);
-        aggregatedZoomRoomDevice.setTimestamp(System.currentTimeMillis());
+        controllableProperties.addAll(settingsControls);
     }
 
     /**
-     * Types of devices: ZoomRoomsComputer, Controller, SchedulingDisplay, ZoomRoomsControlSystem, CompanionWhiteboard
+         * Types of devices: ZoomRoomsComputer, Controller, SchedulingDisplay, ZoomRoomsControlSystem, CompanionWhiteboard
      * Retrieve registered zoom room devices information, group it by type.
      * Calculate number of online/offline devices, display online/offline devices operating systems and app versions.
      *
@@ -835,8 +1094,18 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      * */
     private void retrieveGroupedRoomDevicesInformation(String roomId, Map<String, String> properties) throws Exception {
-        JsonNode devices = retrieveRoomDevices(roomId);
+        Long dataRetrievalTimestamp = validRoomDevicesDataRetrievalPeriodTimestamps.get(roomId);
+        long roomDevicesProperties = properties.keySet().stream().filter(s -> s.startsWith("RoomDevices_")).count();
+        if (roomDevicesProperties > 0 && dataRetrievalTimestamp != null && dataRetrievalTimestamp > System.currentTimeMillis()) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(String.format("Room devices retrieval is in cooldown. %s seconds left",
+                        (dataRetrievalTimestamp - System.currentTimeMillis()) / 1000));
+            }
+            return;
+        }
+        validRoomDevicesDataRetrievalPeriodTimestamps.put(roomId, System.currentTimeMillis() + Math.max(defaultRoomDevicesTimeout, roomDevicesRetrievalTimeout));
 
+        JsonNode devices = retrieveRoomDevices(roomId);
         Map<String, List<Map<String, String>>> deviceGroups = new HashMap<>();
 
         if (devices != null && devices.isArray()) {
@@ -851,6 +1120,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 deviceGroups.get(deviceType).add(roomDeviceProperties);
             }
 
+            cleanupStaleProperties(properties, "RoomDevices_");
             // Process device groups
             // Key is group, value is list of mapped properties
             deviceGroups.forEach((key, value) -> {
@@ -898,6 +1168,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param controllableProperties list to save controllable properties to
      */
     private void createRoomControls(Map<String, String> properties, List<AdvancedControllableProperty> controllableProperties) {
+        cleanupStaleProperties(properties, ROOM_CONTROLS_GROUP);
+        cleanupStaleControls(controllableProperties, ROOM_CONTROLS_GROUP);
+
         String roomStatus = properties.get(METRICS_ROOM_STATUS);
         if (!StringUtils.isNullOrEmpty(roomStatus) && (roomStatus.equals("InMeeting") || roomStatus.equals("Connecting"))) {
             properties.put(END_CURRENT_MEETING_CONTROL, "");
@@ -965,10 +1238,20 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * Retrieve list of all ZoomRooms metrics
+     * To have better control over data collection - it is bound to {@link ZoomRoomsAggregatorCommunicator#validMetricsDataRetrievalPeriodTimestamp} variable
+     * in order to only fetch this information when {@link ZoomRoomsAggregatorCommunicator#metricsRetrievalTimeout} has exceeded
      *
      * @throws Exception if any error occurs
      */
     private void retrieveZoomRoomMetrics() throws Exception {
+        if (zoomRoomsMetricsData.size() > 0 && validMetricsDataRetrievalPeriodTimestamp > System.currentTimeMillis()) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(String.format("Metrics retrieval is in cooldown. %s seconds left",
+                        (validMetricsDataRetrievalPeriodTimestamp - System.currentTimeMillis()) / 1000));
+            }
+            return;
+        }
+        validMetricsDataRetrievalPeriodTimestamp = System.currentTimeMillis() + Math.max(defaultMetricsTimeout, metricsRetrievalTimeout);
         try {
             JsonNode roomsMetrics = doGet(ZOOM_ROOMS_METRICS, JsonNode.class);
             if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("zoom_rooms")) {
@@ -1021,15 +1304,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private JsonNode retrieveAccountSettings(String type) throws Exception {
         return doGetWithRetry(String.format(ZOOM_ROOM_ACCOUNT_SETTINGS_URL) + "?setting_type=" + type);
     }
-
-//    /**
-//     *
-//     */
-//    private void updateAppVersion(String roomId, String deviceId, String action) throws Exception {
-//        Map<String, String> command = new HashMap<>();
-//        command.put("action", action);
-//        doPut(String.format(ZOOM_UPDATE_APP_VERSION, roomId, deviceId), command);
-//    }
 
     /**
      * Update Zoom Account setting
@@ -1106,6 +1380,36 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
+     * Remove an entry from the specified map, if key starts with one of the options provided
+     *
+     * @param properties map to remove property from
+     * @param propertyNames options to use when defining which properties to remove
+     */
+    private void cleanupStaleProperties(Map<String, String> properties, String... propertyNames) {
+        properties.keySet().removeIf(s -> {
+            for (String propertyName: propertyNames) {
+                return s.startsWith(propertyName);
+            }
+            return false;
+        });
+    }
+
+    /**
+     * Remove an entry from the specified list of controllable ptoperties, if property name starts with one of the options provided
+     *
+     * @param advancedControllableProperties list to remove object from
+     * @param controlNames options to use when defining which properties to remove
+     */
+    private void cleanupStaleControls(List<AdvancedControllableProperty> advancedControllableProperties, String... controlNames) {
+        advancedControllableProperties.removeIf(advancedControllableProperty -> {
+            for (String controlName: controlNames) {
+                return advancedControllableProperty.getName().startsWith(controlName);
+            }
+            return false;
+        });
+    }
+
+    /**
      * End current Zoom meeting by sending jsonRpc command
      *
      * @param userId id of the room user to make end current meeting for
@@ -1149,4 +1453,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         request.put("params", params);
         doPost(String.format(ZOOM_ROOM_CLIENT_RPC_MEETINGS, userId), request);
     }
+
+    /**
+     * Normalize value of a setting control to represent real values - true or false.
+     *
+     * @param value raw object coming from Symphony
+     * @return {@link String} value of 'true' or 'false' based on the initial value
+     * */
+    private String normalizeSettingData(Object value) {
+        return "0".equals(String.valueOf(value)) ? "false" : "true";
+    }
+
 }

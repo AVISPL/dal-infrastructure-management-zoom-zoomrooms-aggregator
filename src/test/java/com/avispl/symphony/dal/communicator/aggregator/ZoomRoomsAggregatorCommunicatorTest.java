@@ -75,6 +75,8 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void getDevicesWithDelayTest() throws Exception {
+        mockAggregatorCommunicator.setMetricsRetrievalTimeout(60000);
+        mockAggregatorCommunicator.setDisplayRoomSettings(true);
         List<AggregatedDevice> devices;
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);

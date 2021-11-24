@@ -4,7 +4,6 @@
 package com.avispl.symphony.dal.communicator.aggregator.status;
 
 import com.avispl.symphony.dal.util.StringUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.HashMap;
 import java.util.Map;

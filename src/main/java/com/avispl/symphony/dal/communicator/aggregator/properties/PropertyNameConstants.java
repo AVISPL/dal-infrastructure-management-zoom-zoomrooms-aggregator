@@ -24,6 +24,7 @@ public class PropertyNameConstants {
     public static final String START_ROOM_PMI_CONTROL = "RoomControls#StartRoomPersonalMeeting";
 
     public static final String ROOM_USER_DETAILS_PMI = "RoomUserDetails#PMI";
+    public static final String ROOM_USER_DETAILS_GROUP = "RoomUserDetails#";
 
     public static final String LOCATION_NAME = "Location#Name";
     public static final String LOCATION_ID = "Location#ID";
@@ -41,7 +42,7 @@ public class PropertyNameConstants {
     public static final String ONLINE_DEVICES_TOTAL_PROPERTY = "OnlineDevicesTotal";
     public static final String OFFLINE_DEVICES_TOTAL_PROPERTY = "OfflineDevicesTotal";
 
-    public static final String ROOM_CONTROLS_GROUP = "RoomControls";
+    public static final String ROOM_CONTROLS_GROUP = "RoomControls#";
 
     public static final String ROOM_STATUS_GROUP = "RoomStatus#";
     public static final String METRICS_ROOM_STATUS = "Metrics#RoomStatus";
