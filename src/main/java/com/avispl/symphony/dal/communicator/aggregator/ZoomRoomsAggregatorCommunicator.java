@@ -112,8 +112,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     }
                 }
 
-                List<AggregatedDevice> scannedDevicesList = new ArrayList<>(aggregatedDevices.values());
-
                 try {
                     // The following request collect all the information, so in order to save number of requests, which is
                     // daily limited for certain APIs, we need to request them once per monitoring cycle.
@@ -122,7 +120,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     logger.error("Error occurred during ZoomRooms metrics retrieval: " + e.getMessage() + " with cause: " + e.getCause().getMessage());
                 }
 
-                for (AggregatedDevice aggregatedDevice : scannedDevicesList) {
+                for (AggregatedDevice aggregatedDevice : aggregatedDevices.values()) {
                     if (!inProgress) {
                         break;
                     }
