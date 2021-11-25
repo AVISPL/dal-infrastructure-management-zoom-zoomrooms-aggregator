@@ -536,6 +536,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         aggregatedDeviceProcessor = new AggregatedDeviceProcessor(mapping);
         adapterProperties = new Properties();
         adapterProperties.load(getClass().getResourceAsStream("/version.properties"));
+
     }
 
     /**
@@ -630,6 +631,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     public List<Statistics> getMultipleStatistics() throws Exception {
+
         Map<String, String> statistics = new HashMap<>();
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 
@@ -662,14 +664,22 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     protected void internalInit() throws Exception {
+        if (logger.isDebugEnabled()) {
+            logger.debug("Internal init is called.");
+        }
         setBaseUri(BASE_ZOOM_URL);
         authorizationToken = getPassword();
-        super.internalInit();
+
         executorService = Executors.newFixedThreadPool(8);
         executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
-        validDeviceMetaDataRetrievalPeriodTimestamp = System.currentTimeMillis();
 
+        long currentTimestamp = System.currentTimeMillis();
+        validDeviceMetaDataRetrievalPeriodTimestamp = currentTimestamp;
+        validMetricsDataRetrievalPeriodTimestamp = currentTimestamp;
         serviceRunning = true;
+
+        super.internalInit();
+
     }
 
     /**
@@ -677,6 +687,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     protected void internalDestroy() {
+        if (logger.isDebugEnabled()) {
+            logger.debug("Internal destroy is called.");
+        }
         serviceRunning = false;
 
         if (deviceDataLoader != null) {
@@ -757,10 +770,27 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
-        nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
+        if(logger.isDebugEnabled()) {
+            logger.debug(String.format("Adapter initialized: %s, executorService exists: %s, serviceRunning: %s", isInitialized(), executorService != null, serviceRunning));
+        }
+        if (executorService == null) {
+            // Due to the fact that after changing properties on fly - the adapter is destroyed but internalInit is not called properly,
+            // so executor service is not running.
+            // And in this specific case it won't be because no calls are made outside of the runner.
+            executorService = Executors.newFixedThreadPool(8);
+            executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
+        }
+
+        if (logger.isDebugEnabled()) {
+            logger.debug(String.format("Aggregator Multiple statistics requested. Aggregated Devices collected so far: %s. Runner thread running: %s. Executor terminated: %s",
+                    aggregatedDevices.size(), serviceRunning, executorService.isTerminated()));
+        }
+
+        long currentTimestamp = System.currentTimeMillis();
+        nextDevicesCollectionIterationTimestamp = currentTimestamp;
         updateValidRetrieveStatisticsTimestamp();
 
-        aggregatedDevices.values().forEach(aggregatedDevice -> aggregatedDevice.setTimestamp(System.currentTimeMillis()));
+        aggregatedDevices.values().forEach(aggregatedDevice -> aggregatedDevice.setTimestamp(currentTimestamp));
         return new ArrayList<>(aggregatedDevices.values());
     }
 
@@ -775,14 +805,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if a communication error occurs
      */
     private void fetchDevicesList() throws Exception {
-        if (aggregatedDevices.size() > 0 && validDeviceMetaDataRetrievalPeriodTimestamp > System.currentTimeMillis()) {
+        long currentTimestamp = System.currentTimeMillis();
+        if (aggregatedDevices.size() > 0 && validDeviceMetaDataRetrievalPeriodTimestamp > currentTimestamp) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("General devices metadata retrieval is in cooldown. %s seconds left",
-                        (validDeviceMetaDataRetrievalPeriodTimestamp - System.currentTimeMillis()) / 1000));
+                        (validDeviceMetaDataRetrievalPeriodTimestamp - currentTimestamp) / 1000));
             }
             return;
         }
-        validDeviceMetaDataRetrievalPeriodTimestamp = System.currentTimeMillis() + Math.max(defaultMetaDataTimeout, deviceMetaDataRetrievalTimeout);
+        validDeviceMetaDataRetrievalPeriodTimestamp = currentTimestamp + Math.max(defaultMetaDataTimeout, deviceMetaDataRetrievalTimeout);
 
         List<String> supportedLocationIds = new ArrayList<>();
         if (!StringUtils.isNullOrEmpty(zoomRoomLocations)) {
@@ -795,6 +826,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         supportedLocationIds.add(location.get(LOCATION_ID));
                     }
                 }
+            }
+
+            if(logger.isDebugEnabled()){
+                logger.debug("Updated fetched locations. Supported locationIds: " + supportedLocationIds);
             }
         } else {
             if (logger.isDebugEnabled()) {
@@ -823,6 +858,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
         });
 
+        if(logger.isDebugEnabled()){
+            logger.debug("Updated ZoomRooms devices metadata: " + aggregatedDevices);
+        }
         // Remove rooms that were not populated by the API
         List<String> retrievedRoomIds = zoomRooms.stream().map(AggregatedDevice::getDeviceId).collect(Collectors.toList());
         aggregatedDevices.keySet().removeIf(existingDevice -> !retrievedRoomIds.contains(existingDevice));
@@ -988,7 +1026,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
         aggregatedZoomRoomDevice.setProperties(properties);
         aggregatedZoomRoomDevice.setControllableProperties(controllableProperties);
-        aggregatedZoomRoomDevice.setTimestamp(System.currentTimeMillis());
     }
 
     /**
@@ -999,17 +1036,18 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param properties map to add statistics to
      */
     private void populateRoomUserDetails(String roomUserId, Map<String, String> properties) throws Exception {
+        long currentTimestamp = System.currentTimeMillis();
         Long dataRetrievalTimestamp = validUserDetailsDataRetrievalPeriodTimestamps.get(roomUserId);
         long roomUserDetailsProperties = properties.keySet().stream().filter(s -> s.startsWith(ROOM_USER_DETAILS_GROUP)).count();
         if (roomUserDetailsProperties > 0 && dataRetrievalTimestamp != null &&
-                dataRetrievalTimestamp > System.currentTimeMillis()) {
+                dataRetrievalTimestamp > currentTimestamp) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Room User details retrieval is in cooldown. %s seconds left",
-                        (dataRetrievalTimestamp - System.currentTimeMillis()) / 1000));
+                        (dataRetrievalTimestamp - currentTimestamp) / 1000));
             }
             return;
         }
-        validUserDetailsDataRetrievalPeriodTimestamps.put(roomUserId, System.currentTimeMillis() + Math.max(defaultUserDetailsTimeout, roomUserDetailsRetrievalTimeout));
+        validUserDetailsDataRetrievalPeriodTimestamps.put(roomUserId, currentTimestamp + Math.max(defaultUserDetailsTimeout, roomUserDetailsRetrievalTimeout));
 
         JsonNode roomUserDetails = retrieveUserDetails(roomUserId);
         Map<String, String> roomUserProperties = new HashMap<>();
@@ -1019,6 +1057,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (roomUserDetails != null) {
             aggregatedDeviceProcessor.applyProperties(roomUserProperties, roomUserDetails, "RoomUserDetails");
             properties.putAll(roomUserProperties);
+        }
+
+        if(logger.isDebugEnabled()){
+            logger.debug("Updated ZoomRooms user details: " + roomUserProperties);
         }
     }
 
@@ -1032,11 +1074,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private void populateRoomSettings(String roomId, Map<String, String> properties, List<AdvancedControllableProperty> controllableProperties) throws Exception {
         Long dataRetrievalTimestamp = validRoomSettingsDataRetrievalPeriodTimestamps.get(roomId);
+        long currentTimestamp = System.currentTimeMillis();
         long roomSettingsProperties = properties.keySet().stream().filter(s -> s.startsWith(ROOM_CONTROLS_ALERT_SETTINGS_GROUP) || s.startsWith(ROOM_CONTROLS_MEETING_SETTINGS_GROUP)).count();
-        if ((roomSettingsProperties > 0 && dataRetrievalTimestamp != null && dataRetrievalTimestamp > System.currentTimeMillis())) {
+        if ((roomSettingsProperties > 0 && dataRetrievalTimestamp != null && dataRetrievalTimestamp > currentTimestamp)) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Room settings retrieval is in cooldown. %s seconds left",
-                        (dataRetrievalTimestamp - System.currentTimeMillis()) / 1000));
+                        (dataRetrievalTimestamp - currentTimestamp) / 1000));
             }
             return;
         }
@@ -1046,7 +1089,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             return;
         }
-        validRoomSettingsDataRetrievalPeriodTimestamps.put(roomId, System.currentTimeMillis() + Math.max(defaultRoomSettingsTimeout, roomSettingsRetrievalTimeout));
+        validRoomSettingsDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + Math.max(defaultRoomSettingsTimeout, roomSettingsRetrievalTimeout));
 
         cleanupStaleProperties(properties, ROOM_CONTROLS_ALERT_SETTINGS_GROUP, ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
         cleanupStaleControls(controllableProperties, ROOM_CONTROLS_ALERT_SETTINGS_GROUP, ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
@@ -1092,6 +1135,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
         properties.putAll(settingsProperties);
         controllableProperties.addAll(settingsControls);
+
+        if(logger.isDebugEnabled()){
+            logger.debug("Updated ZoomRooms room settings: " + settingsProperties);
+        }
     }
 
     /**
@@ -1105,15 +1152,16 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private void retrieveGroupedRoomDevicesInformation(String roomId, Map<String, String> properties) throws Exception {
         Long dataRetrievalTimestamp = validRoomDevicesDataRetrievalPeriodTimestamps.get(roomId);
+        long currentTimestamp = System.currentTimeMillis();
         long roomDevicesProperties = properties.keySet().stream().filter(s -> s.startsWith("RoomDevices_")).count();
-        if (roomDevicesProperties > 0 && dataRetrievalTimestamp != null && dataRetrievalTimestamp > System.currentTimeMillis()) {
+        if (roomDevicesProperties > 0 && dataRetrievalTimestamp != null && dataRetrievalTimestamp > currentTimestamp) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Room devices retrieval is in cooldown. %s seconds left",
-                        (dataRetrievalTimestamp - System.currentTimeMillis()) / 1000));
+                        (dataRetrievalTimestamp - currentTimestamp) / 1000));
             }
             return;
         }
-        validRoomDevicesDataRetrievalPeriodTimestamps.put(roomId, System.currentTimeMillis() + Math.max(defaultRoomDevicesTimeout, roomDevicesRetrievalTimeout));
+        validRoomDevicesDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + Math.max(defaultRoomDevicesTimeout, roomDevicesRetrievalTimeout));
 
         JsonNode devices = retrieveRoomDevices(roomId);
         Map<String, List<Map<String, String>>> deviceGroups = new HashMap<>();
@@ -1168,6 +1216,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 properties.put(String.format(ROOM_DEVICES_TEMPLATE_PROPERTY, key, ONLINE_DEVICES_TOTAL_PROPERTY), String.valueOf(onlineDevicesTotal));
                 properties.put(String.format(ROOM_DEVICES_TEMPLATE_PROPERTY, key, OFFLINE_DEVICES_TOTAL_PROPERTY), String.valueOf(offlineDevicesTotal));
             });
+        }
+        if(logger.isDebugEnabled()){
+            logger.debug("Updated ZoomRooms devices properties: " + devices);
         }
     }
 
@@ -1254,14 +1305,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private void retrieveZoomRoomMetrics() throws Exception {
-        if (zoomRoomsMetricsData.size() > 0 && validMetricsDataRetrievalPeriodTimestamp > System.currentTimeMillis()) {
+        long currentTimestamp = System.currentTimeMillis();
+        if (zoomRoomsMetricsData.size() > 0 && validMetricsDataRetrievalPeriodTimestamp > currentTimestamp) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Metrics retrieval is in cooldown. %s seconds left",
-                        (validMetricsDataRetrievalPeriodTimestamp - System.currentTimeMillis()) / 1000));
+                        (validMetricsDataRetrievalPeriodTimestamp - currentTimestamp) / 1000));
             }
             return;
         }
-        validMetricsDataRetrievalPeriodTimestamp = System.currentTimeMillis() + Math.max(defaultMetricsTimeout, metricsRetrievalTimeout);
+        validMetricsDataRetrievalPeriodTimestamp = currentTimestamp + Math.max(defaultMetricsTimeout, metricsRetrievalTimeout);
         try {
             JsonNode roomsMetrics = doGet(ZOOM_ROOMS_METRICS, JsonNode.class);
             if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("zoom_rooms")) {
@@ -1271,11 +1323,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     zoomRoomsMetricsData.put(metric.get("id").asText(), metricsData);
                 }
             }
+            if(logger.isDebugEnabled()){
+                logger.debug("Updated ZoomRooms metrics entries: " + zoomRoomsMetricsData);
+            }
         } catch (CommandFailureException ex) {
             if (ex.getStatusCode() == 429) {
                 logger.warn(String.format("Maximum daily rate limit for %s API was reached.", ZOOM_ROOMS_METRICS), ex);
+            } else {
+                throw ex;
             }
-            throw ex;
         }
     }
 

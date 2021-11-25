@@ -76,7 +76,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     @Test
     public void getDevicesWithLocationsFilteringTest() throws Exception {
         mockAggregatorCommunicator.setDisplayRoomSettings(true);
-        mockAggregatorCommunicator.setZoomRoomLocations("Chicago,Colorado");
+        mockAggregatorCommunicator.setZoomRoomLocations("Chicago,Arizona");
         mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);
         List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
@@ -103,7 +103,12 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void getDevicesWithDelayTest() throws Exception {
-        mockAggregatorCommunicator.setMetricsRetrievalTimeout(60000);
+        mockAggregatorCommunicator.setMetricsRetrievalTimeout(90000);
+        mockAggregatorCommunicator.setDeviceMetaDataRetrievalTimeout(60000);
+        mockAggregatorCommunicator.setRoomDevicesRetrievalTimeout(60000);
+        mockAggregatorCommunicator.setRoomSettingsRetrievalTimeout(30000);
+        mockAggregatorCommunicator.setRoomUserDetailsRetrievalTimeout(60000);
+
         mockAggregatorCommunicator.setDisplayRoomSettings(true);
         List<AggregatedDevice> devices;
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
