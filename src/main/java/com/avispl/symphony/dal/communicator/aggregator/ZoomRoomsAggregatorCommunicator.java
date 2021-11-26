@@ -945,7 +945,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * In order to make it more user-friendly, it is expected that {@link #zoomRoomLocations} will contain
      * csv list of Location Names, e.g "Country/Region1", "State1" etc.
      * <p>
-     * TODO: check location hierarchy, it may be necessary to check ParentLocationId in order to retrieve the right one.
      *
      * @throws Exception if a communication error occurs
      */
