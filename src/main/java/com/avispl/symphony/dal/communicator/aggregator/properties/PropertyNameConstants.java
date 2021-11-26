@@ -45,6 +45,7 @@ public class PropertyNameConstants {
     public static final String ROOM_CONTROLS_GROUP = "RoomControls#";
 
     public static final String LIVE_MEETING_GROUP = "LiveMeeting#";
+    public static final String LIVE_MEETING_GROUP_WARNING = "LiveMeeting#Warning";
 
     public static final String ROOM_STATUS_GROUP = "RoomStatus#";
     public static final String METRICS_ROOM_STATUS = "Metrics#RoomStatus";

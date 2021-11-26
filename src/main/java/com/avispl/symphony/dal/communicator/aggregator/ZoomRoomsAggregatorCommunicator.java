@@ -172,6 +172,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      * Interceptor for RestTemplate that checks for the response headers populated for certain endpoints
      * such as metrics, to control the amount of requests left per day.
+     *
+     * @author Maksym.Rossiytsev
+     * @since 1.0.0
      */
     class ZoomRoomsHeaderInterceptor implements ClientHttpRequestInterceptor {
         @Override
@@ -193,12 +196,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     private static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String BASE_ZOOM_URL = "v2";
-    private static final String ZOOM_ROOMS_URL = "rooms?page_size=5000";
-    private static final String ZOOM_DEVICES_URL = "rooms/%s/devices?page_size=5000"; // Requires room Id
+    private static final String ZOOM_ROOMS_URL = "rooms?page_size=%s";
+    private static final String ZOOM_DEVICES_URL = "rooms/%s/devices?page_size=%s"; // Requires room Id
     private static final String ZOOM_ROOM_SETTINGS_URL = "/rooms/%s/settings"; // Requires room Id
     private static final String ZOOM_ROOM_ACCOUNT_SETTINGS_URL = "rooms/account_settings";
-    private static final String ZOOM_ROOMS_METRICS = "metrics/zoomrooms?page_size=5000";
-    private static final String ZOOM_ROOM_LOCATIONS = "rooms/locations?page_size=5000"; // TODO: Configurable page size
+    private static final String ZOOM_ROOMS_METRICS = "metrics/zoomrooms?page_size=%s";
+    private static final String ZOOM_ROOM_LOCATIONS = "rooms/locations?page_size=%s";
     private static final String ZOOM_USER_DETAILS = "/users/%s";
     private static final String ZOOM_ROOM_METRICS_DETAILS = "metrics/zoomrooms/%s";
 
@@ -280,6 +283,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final long defaultRoomDevicesTimeout = 60 * 1000 / 2;
 
     /**
+     * Default limit for {@link #meetingDetailsDailyRequestRateThreshold}
+     */
+    private static final int defaultMeetingDetailsDailyRequestRateThreshold = 5000;
+
+    /**
      * Device metadata retrieval timeout. The general devices list is retrieved once during this time period.
      */
     private long deviceMetaDataRetrievalTimeout = 60 * 1000 / 2;
@@ -305,11 +313,16 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private long roomDevicesRetrievalTimeout = 60 * 1000 / 2;
 
     /**
+     * Size of a room responses, in pages.
+     * */
+    private int roomRequestPageSize = 5000;
+
+    /**
      * The bottom rate limit for meeting details retrieval for rooms that have status InMeeting.
      * If {@link #metricsRateLimitRemaining} is less than this value - metrics details are not populated
      * (except for the general metrics data)
      */
-    private int meetingDetailsBottomRateLimit = 5000;
+    private int meetingDetailsDailyRequestRateThreshold = 5000;
 
     /**
      * Whether or not to show the LiveMeeting details for the rooms that have status InMeeting
@@ -329,10 +342,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private volatile long validMetricsDataRetrievalPeriodTimestamp;
 
     /**
-     * Time period within which the device meetings metrics (dynamic information) cannot be refreshed.
+     * Time period within which the device meetings metrics (dynamic information) cannot be refreshed (per room).
      * Ignored if metrics data is not yet retrieved
      */
-    private volatile long validMeetingsDataRetrievalPeriodTimestamp;
+    private ConcurrentHashMap<String, Long> validMeetingsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
 
     /**
      * Map of roomUserId:timestamp within which the room user details cannot be refreshed.
@@ -387,21 +400,39 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private ZoomRoomsDeviceDataLoader deviceDataLoader;
 
     /**
-     * Retrieves {@code {@link #meetingDetailsBottomRateLimit}}
+     * Retrieves {@code {@link #meetingDetailsDailyRequestRateThreshold }}
      *
-     * @return value of {@link #meetingDetailsBottomRateLimit}
+     * @return value of {@link #meetingDetailsDailyRequestRateThreshold}
      */
-    public int getMeetingDetailsBottomRateLimit() {
-        return meetingDetailsBottomRateLimit;
+    public int getMeetingDetailsDailyRequestRateThreshold() {
+        return meetingDetailsDailyRequestRateThreshold;
     }
 
     /**
      * Sets {@code meetingDetailsBottomRateLimit}
      *
-     * @param meetingDetailsBottomRateLimit the {@code int} field
+     * @param meetingDetailsDailyRequestRateThreshold the {@code int} field
      */
-    public void setMeetingDetailsBottomRateLimit(int meetingDetailsBottomRateLimit) {
-        this.meetingDetailsBottomRateLimit = meetingDetailsBottomRateLimit;
+    public void setMeetingDetailsDailyRequestRateThreshold(int meetingDetailsDailyRequestRateThreshold) {
+        this.meetingDetailsDailyRequestRateThreshold = Math.max(meetingDetailsDailyRequestRateThreshold, defaultMeetingDetailsDailyRequestRateThreshold);
+    }
+
+    /**
+     * Retrieves {@code {@link #roomRequestPageSize}}
+     *
+     * @return value of {@link #roomRequestPageSize}
+     */
+    public int getRoomRequestPageSize() {
+        return roomRequestPageSize;
+    }
+
+    /**
+     * Sets {@code roomRequestPageSize}
+     *
+     * @param roomRequestPageSize the {@code int} field
+     */
+    public void setRoomRequestPageSize(int roomRequestPageSize) {
+        this.roomRequestPageSize = roomRequestPageSize;
     }
 
     /**
@@ -437,7 +468,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param deviceMetaDataRetrievalTimeout the {@code long} field
      */
     public void setDeviceMetaDataRetrievalTimeout(long deviceMetaDataRetrievalTimeout) {
-        this.deviceMetaDataRetrievalTimeout = deviceMetaDataRetrievalTimeout;
+        this.deviceMetaDataRetrievalTimeout = Math.max(defaultMetaDataTimeout, deviceMetaDataRetrievalTimeout);
     }
 
     /**
@@ -527,7 +558,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param metricsRetrievalTimeout the {@code long} field
      */
     public void setMetricsRetrievalTimeout(long metricsRetrievalTimeout) {
-        this.metricsRetrievalTimeout = metricsRetrievalTimeout;
+        this.metricsRetrievalTimeout = Math.max(defaultMetricsTimeout, metricsRetrievalTimeout);
     }
 
     /**
@@ -545,7 +576,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param roomUserDetailsRetrievalTimeout the {@code long} field
      */
     public void setRoomUserDetailsRetrievalTimeout(long roomUserDetailsRetrievalTimeout) {
-        this.roomUserDetailsRetrievalTimeout = roomUserDetailsRetrievalTimeout;
+        this.roomUserDetailsRetrievalTimeout = Math.max(defaultUserDetailsTimeout, roomUserDetailsRetrievalTimeout);
     }
 
     /**
@@ -563,7 +594,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param roomSettingsRetrievalTimeout the {@code long} field
      */
     public void setRoomSettingsRetrievalTimeout(long roomSettingsRetrievalTimeout) {
-        this.roomSettingsRetrievalTimeout = roomSettingsRetrievalTimeout;
+        this.roomSettingsRetrievalTimeout = Math.max(defaultRoomSettingsTimeout, roomSettingsRetrievalTimeout);
     }
 
     /**
@@ -581,7 +612,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param roomDevicesRetrievalTimeout the {@code long} field
      */
     public void setRoomDevicesRetrievalTimeout(long roomDevicesRetrievalTimeout) {
-        this.roomDevicesRetrievalTimeout = roomDevicesRetrievalTimeout;
+        this.roomDevicesRetrievalTimeout = Math.max(defaultRoomDevicesTimeout, roomDevicesRetrievalTimeout);
     }
 
     /**
@@ -825,6 +856,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         validUserDetailsDataRetrievalPeriodTimestamps.clear();
         validRoomDevicesDataRetrievalPeriodTimestamps.clear();
         validRoomSettingsDataRetrievalPeriodTimestamps.clear();
+        validMeetingsDataRetrievalPeriodTimestamps.clear();
         super.internalDestroy();
     }
 
@@ -926,7 +958,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             return;
         }
-        validDeviceMetaDataRetrievalPeriodTimestamp = currentTimestamp + Math.max(defaultMetaDataTimeout, deviceMetaDataRetrievalTimeout);
+        validDeviceMetaDataRetrievalPeriodTimestamp = currentTimestamp + deviceMetaDataRetrievalTimeout;
 
         List<String> supportedLocationIds = new ArrayList<>();
         if (!StringUtils.isNullOrEmpty(zoomRoomLocations)) {
@@ -1042,7 +1074,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (!StringUtils.isNullOrEmpty(locationId)) {
             queryString.append("&location_id=").append(locationId);
         }
-        return doGetWithRetry(ZOOM_ROOMS_URL + queryString.toString());
+        return doGetWithRetry(String.format(ZOOM_ROOMS_URL, roomRequestPageSize) + queryString.toString());
     }
 
     /**
@@ -1168,7 +1200,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             return;
         }
-        validUserDetailsDataRetrievalPeriodTimestamps.put(roomUserId, currentTimestamp + Math.max(defaultUserDetailsTimeout, roomUserDetailsRetrievalTimeout));
+        validUserDetailsDataRetrievalPeriodTimestamps.put(roomUserId, currentTimestamp + roomUserDetailsRetrievalTimeout);
 
         JsonNode roomUserDetails = retrieveUserDetails(roomUserId);
         Map<String, String> roomUserProperties = new HashMap<>();
@@ -1210,7 +1242,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             return;
         }
-        validRoomSettingsDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + Math.max(defaultRoomSettingsTimeout, roomSettingsRetrievalTimeout));
+        validRoomSettingsDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + roomSettingsRetrievalTimeout);
 
         cleanupStaleProperties(properties, ROOM_CONTROLS_ALERT_SETTINGS_GROUP, ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
         cleanupStaleControls(controllableProperties, ROOM_CONTROLS_ALERT_SETTINGS_GROUP, ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
@@ -1282,7 +1314,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             return;
         }
-        validRoomDevicesDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + Math.max(defaultRoomDevicesTimeout, roomDevicesRetrievalTimeout));
+        validRoomDevicesDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + roomDevicesRetrievalTimeout);
 
         JsonNode devices = retrieveRoomDevices(roomId);
         Map<String, List<Map<String, String>>> deviceGroups = new HashMap<>();
@@ -1396,8 +1428,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (propertyName.startsWith(ROOM_CONTROLS_GROUP)) {
             if (propertyName.endsWith(LEAVE_CURRENT_MEETING_PROPERTY) || propertyName.endsWith(END_CURRENT_MEETING_PROPERTY)) {
                 properties.put(METRICS_ROOM_STATUS, "Available");
+
+                // Need to cleanup live meeting information an remove metrics data from
+                cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
+                zoomRoomsMetricsData.get(roomId).put(METRICS_ROOM_STATUS, "Available");
             } else if (propertyName.endsWith("StartRoomPersonalMeeting")) {
                 properties.put(METRICS_ROOM_STATUS, "Connecting");
+                zoomRoomsMetricsData.get(roomId).put(METRICS_ROOM_STATUS, "Connecting");
             }
             createRoomControls(properties, advancedControllableProperties);
         }
@@ -1411,7 +1448,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private JsonNode retrieveRoomDevices(String roomId) throws Exception {
-        JsonNode roomDevices = doGetWithRetry(String.format(ZOOM_DEVICES_URL, roomId));
+        JsonNode roomDevices = doGetWithRetry(String.format(ZOOM_DEVICES_URL, roomId, roomRequestPageSize));
         if (roomDevices != null && roomDevices.has("devices")) {
             return roomDevices.get("devices");
         }
@@ -1434,9 +1471,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             return;
         }
-        validMetricsDataRetrievalPeriodTimestamp = currentTimestamp + Math.max(defaultMetricsTimeout, metricsRetrievalTimeout);
+        validMetricsDataRetrievalPeriodTimestamp = currentTimestamp + metricsRetrievalTimeout;
         try {
-            JsonNode roomsMetrics = doGet(ZOOM_ROOMS_METRICS, JsonNode.class);
+            JsonNode roomsMetrics = doGet(String.format(ZOOM_ROOMS_METRICS, roomRequestPageSize), JsonNode.class);
             if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("zoom_rooms")) {
                 for (JsonNode metric : roomsMetrics.get("zoom_rooms")) {
                     Map<String, String> metricsData = new HashMap<>();
@@ -1465,26 +1502,28 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private void retrieveZoomRoomMetricsDetails(String roomId, Map<String, String> properties) throws Exception {
         long currentTimestamp = System.currentTimeMillis();
-        if (validMeetingsDataRetrievalPeriodTimestamp > currentTimestamp) {
+        Long dataRetrievalTimestamp = validMeetingsDataRetrievalPeriodTimestamps.get(roomId);
+        if (dataRetrievalTimestamp != null && dataRetrievalTimestamp > currentTimestamp) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Meeting metrics retrieval is in cooldown. %s seconds left",
-                        (validMeetingsDataRetrievalPeriodTimestamp - currentTimestamp) / 1000));
+                        (dataRetrievalTimestamp - currentTimestamp) / 1000));
             }
             return;
         }
         // Metrics retrieval timeout is used so this information is retrieve once per general metrics refresh period.
         // First full metrics payload is retrieved, then the details (if necessary), an only once. Next iteration
         // will happen after general metrics data refreshed.
-        validMeetingsDataRetrievalPeriodTimestamp = currentTimestamp + Math.max(defaultMetricsTimeout, metricsRetrievalTimeout);
+        validMeetingsDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + metricsRetrievalTimeout);
 
         // Need to cleanup stale properties before checking whether it is generally allowed to fetch these properties anymore.
         // So if it isn't allowed - properties are removed for good.
         cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
 
-        if (metricsRateLimitRemaining == null || metricsRateLimitRemaining < meetingDetailsBottomRateLimit) {
+        if (metricsRateLimitRemaining == null || metricsRateLimitRemaining < meetingDetailsDailyRequestRateThreshold) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Skipping collection of meeting details for room %s. Remaining metrics rate limit: %s", roomId, metricsRateLimitRemaining));
             }
+            properties.put(LIVE_MEETING_GROUP_WARNING, String.format("Daily request rate threshold of %s for the Meeting Dashboard API was reached.", meetingDetailsDailyRequestRateThreshold));
             return;
         }
         if (!displayLiveMeetingDetails) {
@@ -1518,7 +1557,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private JsonNode retrieveZoomRoomLocations() throws Exception {
-        JsonNode roomsMetrics = doGetWithRetry(ZOOM_ROOM_LOCATIONS);
+        JsonNode roomsMetrics = doGetWithRetry(String.format(ZOOM_ROOM_LOCATIONS, roomRequestPageSize));
         if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("locations")) {
             return roomsMetrics.get("locations");
         }
