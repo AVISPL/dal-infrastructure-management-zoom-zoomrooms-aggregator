@@ -202,17 +202,29 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String ZOOM_ROOM_ACCOUNT_SETTINGS_URL = "rooms/account_settings";
     private static final String ZOOM_ROOMS_METRICS = "metrics/zoomrooms?page_size=%s";
     private static final String ZOOM_ROOM_LOCATIONS = "rooms/locations?page_size=%s";
-    private static final String ZOOM_USER_DETAILS = "/users/%s";
-    private static final String ZOOM_ROOM_METRICS_DETAILS = "metrics/zoomrooms/%s";
+    private static final String ZOOM_USER_DETAILS = "/users/%s"; // Requires room user id
+    private static final String ZOOM_ROOM_METRICS_DETAILS = "metrics/zoomrooms/%s"; // Required room id
 
-    private static final String ZOOM_ROOM_CLIENT_RPC = "/rooms/%s/zrclient";
-    private static final String ZOOM_ROOM_CLIENT_RPC_MEETINGS = "/rooms/%s/meetings";
+    private static final String ZOOM_ROOM_CLIENT_RPC = "/rooms/%s/zrclient"; // Required room user id
+    private static final String ZOOM_ROOM_CLIENT_RPC_MEETINGS = "/rooms/%s/meetings"; // Required room user id
 
     private AggregatedDeviceProcessor aggregatedDeviceProcessor;
+
+    /**
+     * API Token (JWT) used for authorization in Zoom API
+     * */
+    private String authorizationToken;
+
     /**
      * Devices this aggregator is responsible for
+     * Data is cached and retrieved every {@link #defaultMetaDataTimeout}
      */
     private ConcurrentHashMap<String, AggregatedDevice> aggregatedDevices = new ConcurrentHashMap<>();
+
+    /**
+     * Cached metrics data, retrieved from the resource-heavy API. Since daily request rate is limited - it must be cached
+     * and retrieved from the cache. Data is retrieved every {@link #metricsRetrievalTimeout}
+     * */
     private ConcurrentHashMap<String, Map<String, String>> zoomRoomsMetricsData = new ConcurrentHashMap<>();
 
     /**
@@ -221,13 +233,20 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private ClientHttpRequestInterceptor zoomRoomsHeaderInterceptor = new ZoomRoomsHeaderInterceptor();
 
+    /**
+     * Adapter metadata, collected from the version.properties
+     */
     private Properties adapterProperties;
 
+    /**
+     * Locations specified for filtering
+     * */
     private String zoomRoomLocations;
+
+    /**
+     * Zoom Room types specified for filtering
+     * */
     private String zoomRoomTypes; // ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly
-    private String devicesProperties;
-    private String aggregatorProperties;
-    private String authorizationToken;
 
     /**
      * Remaining daily call rate limit for metrics endpoint.
@@ -239,18 +258,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Whether service is running.
      */
     private volatile boolean serviceRunning;
-
-    /**
-     * Triggers visibility of Room property groups:
-     * RoomControlsAlertSettings, RoomControlsMeetingSettings
-     */
-    private boolean displayRoomSettings;
-
-    /**
-     * Triggers visibility of Aggregator property groups:
-     * AccountAlertSettings, AccountMeetingSettings
-     */
-    private boolean displayAccountSettings;
 
     /**
      * If the {@link ZoomRoomsAggregatorCommunicator#deviceMetaDataRetrievalTimeout} is set to a value that is too small -
@@ -286,6 +293,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Default limit for {@link #meetingDetailsDailyRequestRateThreshold}
      */
     private static final int defaultMeetingDetailsDailyRequestRateThreshold = 5000;
+
+    /**
+     * Aggregator inactivity timeout. If the {@link ZoomRoomsAggregatorCommunicator#retrieveMultipleStatistics()}  method is not
+     * called during this period of time - device is considered to be paused, thus the Cloud API
+     * is not supposed to be called
+     */
+    private static final long retrieveStatisticsTimeOut = 3 * 60 * 1000;
 
     /**
      * Device metadata retrieval timeout. The general devices list is retrieved once during this time period.
@@ -328,6 +342,18 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Whether or not to show the LiveMeeting details for the rooms that have status InMeeting
      */
     private boolean displayLiveMeetingDetails = false;
+
+    /**
+     * Triggers visibility of Room property groups:
+     * RoomControlsAlertSettings, RoomControlsMeetingSettings
+     */
+    private boolean displayRoomSettings;
+
+    /**
+     * Triggers visibility of Aggregator property groups:
+     * AccountAlertSettings, AccountMeetingSettings
+     */
+    private boolean displayAccountSettings;
 
     /**
      * Time period within which the device metadata (basic devices information) cannot be refreshed.
@@ -381,13 +407,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private volatile long validRetrieveStatisticsTimestamp;
 
     /**
-     * Aggregator inactivity timeout. If the {@link ZoomRoomsAggregatorCommunicator#retrieveMultipleStatistics()}  method is not
-     * called during this period of time - device is considered to be paused, thus the Cloud API
-     * is not supposed to be called
-     */
-    private static final long retrieveStatisticsTimeOut = 3 * 60 * 1000;
-
-    /**
      * Indicates whether a device is considered as paused.
      * True by default so if the system is rebooted and the actual value is lost -> the device won't start stats
      * collection unless the {@link ZoomRoomsAggregatorCommunicator#retrieveMultipleStatistics()} method is called which will change it
@@ -395,9 +414,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private volatile boolean devicePaused = true;
 
+    /**
+     * Executor that runs all the async operations, that {@link #deviceDataLoader} is posting and
+     * {@link #devicesExecutionPool} is keeping track of
+     * */
     private static ExecutorService executorService;
-    private List<Future> devicesExecutionPool = new ArrayList<>();
+
+    /**
+     * Runner service responsible for collecting data and posting processes to {@link #devicesExecutionPool}
+     * */
     private ZoomRoomsDeviceDataLoader deviceDataLoader;
+
+    /**
+     * Pool for keeping all the async operations in, to track any operations in progress and cancel them if needed
+     * */
+    private List<Future> devicesExecutionPool = new ArrayList<>();
 
     /**
      * Retrieves {@code {@link #meetingDetailsDailyRequestRateThreshold }}
@@ -505,42 +536,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     public void setZoomRoomTypes(String zoomRoomTypes) {
         this.zoomRoomTypes = zoomRoomTypes.replaceAll(" ", "");
-    }
-
-    /**
-     * Retrieves {@code {@link #devicesProperties}}
-     *
-     * @return value of {@link #devicesProperties}
-     */
-    public String getDevicesProperties() {
-        return devicesProperties;
-    }
-
-    /**
-     * Sets {@code devicesProperties}
-     *
-     * @param devicesProperties the {@code java.lang.String} field
-     */
-    public void setDevicesProperties(String devicesProperties) {
-        this.devicesProperties = devicesProperties;
-    }
-
-    /**
-     * Retrieves {@code {@link #aggregatorProperties}}
-     *
-     * @return value of {@link #aggregatorProperties}
-     */
-    public String getAggregatorProperties() {
-        return aggregatorProperties;
-    }
-
-    /**
-     * Sets {@code aggregatorProperties}
-     *
-     * @param aggregatorProperties the {@code java.lang.String} field
-     */
-    public void setAggregatorProperties(String aggregatorProperties) {
-        this.aggregatorProperties = aggregatorProperties;
     }
 
     /**
@@ -797,7 +792,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         statistics.put("AdapterBuildDate", adapterProperties.getProperty("mock.aggregator.build.date"));
 
         if (metricsRateLimitRemaining != null) {
-            statistics.put("MetricsRateLimitRemaining", String.valueOf(metricsRateLimitRemaining));
+            statistics.put("DashboardMetricsDailyRateLimitRemaining", String.valueOf(metricsRateLimitRemaining));
         }
 
         extendedStatistics.setStatistics(statistics);
