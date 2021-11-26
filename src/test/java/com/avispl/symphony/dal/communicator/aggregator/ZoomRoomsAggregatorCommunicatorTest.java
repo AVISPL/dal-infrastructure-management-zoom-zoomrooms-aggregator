@@ -2,22 +2,14 @@ package com.avispl.symphony.dal.communicator.aggregator;
 
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
-import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
 import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
 import org.junit.Assert;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
-import org.junit.platform.commons.util.StringUtils;
 
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Tag("test")
 public class ZoomRoomsAggregatorCommunicatorTest {
@@ -108,7 +100,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
         mockAggregatorCommunicator.setRoomDevicesRetrievalTimeout(60000);
         mockAggregatorCommunicator.setRoomSettingsRetrievalTimeout(30000);
         mockAggregatorCommunicator.setRoomUserDetailsRetrievalTimeout(60000);
-
+        mockAggregatorCommunicator.setDisplayLiveMeetingDetails(true);
         mockAggregatorCommunicator.setDisplayRoomSettings(true);
         List<AggregatedDevice> devices;
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
