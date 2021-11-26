@@ -517,7 +517,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param zoomRoomLocations the {@code java.lang.String} field
      */
     public void setZoomRoomLocations(String zoomRoomLocations) {
-        this.zoomRoomLocations = zoomRoomLocations;
+        this.zoomRoomLocations = zoomRoomLocations.replaceAll(" ", "");
     }
 
     /**
