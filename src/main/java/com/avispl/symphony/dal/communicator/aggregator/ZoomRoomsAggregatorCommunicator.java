@@ -774,13 +774,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             logger.debug(String.format("Adapter initialized: %s, executorService exists: %s, serviceRunning: %s", isInitialized(), executorService != null, serviceRunning));
         }
         if (executorService == null) {
-            // Due to the fact that after changing properties on fly - the adapter is destroyed but internalInit is not called properly,
-            // so executor service is not running.
-            // And in this specific case it won't be because no calls are made outside of the runner.
+            // Due to the bug that after changing properties on fly - the adapter is destroyed but adapter is not initialized properly,
+            // so executor service is not running. We need to make sure executorService exists
             executorService = Executors.newFixedThreadPool(8);
             executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
         }
-
         if (logger.isDebugEnabled()) {
             logger.debug(String.format("Aggregator Multiple statistics requested. Aggregated Devices collected so far: %s. Runner thread running: %s. Executor terminated: %s",
                     aggregatedDevices.size(), serviceRunning, executorService.isTerminated()));
