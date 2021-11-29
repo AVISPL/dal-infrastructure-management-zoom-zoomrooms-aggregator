@@ -1300,7 +1300,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private void retrieveGroupedRoomDevicesInformation(String roomId, Map<String, String> properties) throws Exception {
         Long dataRetrievalTimestamp = validRoomDevicesDataRetrievalPeriodTimestamps.get(roomId);
         long currentTimestamp = System.currentTimeMillis();
-        long roomDevicesProperties = properties.keySet().stream().filter(s -> s.startsWith("RoomDevices_")).count();
+        long roomDevicesProperties = properties.keySet().stream().filter(s -> s.startsWith(ROOM_DEVICES_GROUP)).count();
         if (roomDevicesProperties > 0 && dataRetrievalTimestamp != null && dataRetrievalTimestamp > currentTimestamp) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Room devices retrieval is in cooldown. %s seconds left",
@@ -1325,7 +1325,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 deviceGroups.get(deviceType).add(roomDeviceProperties);
             }
 
-            cleanupStaleProperties(properties, "RoomDevices_");
+            cleanupStaleProperties(properties, ROOM_DEVICES_GROUP);
             // Process device groups
             // Key is group, value is list of mapped properties
             deviceGroups.forEach((key, value) -> {
