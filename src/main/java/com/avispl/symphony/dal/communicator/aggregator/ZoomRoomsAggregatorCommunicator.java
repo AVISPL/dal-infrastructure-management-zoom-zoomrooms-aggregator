@@ -259,6 +259,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private volatile boolean serviceRunning;
 
+    /** Device adapter instantiation timestamp. */
+    private long adapterInitializationTimestamp;
+
     /**
      * If the {@link ZoomRoomsAggregatorCommunicator#deviceMetaDataRetrievalTimeout} is set to a value that is too small -
      * devices list will be fetched too frequently. In order to avoid this - the minimal value is based on this value.
@@ -790,6 +793,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
         statistics.put("AdapterVersion", adapterProperties.getProperty("mock.aggregator.version"));
         statistics.put("AdapterBuildDate", adapterProperties.getProperty("mock.aggregator.build.date"));
+        statistics.put("AdapterUptime", normalizeUptime((System.currentTimeMillis() - adapterInitializationTimestamp)/1000));
 
         if (metricsRateLimitRemaining != null) {
             statistics.put("DashboardMetricsDailyRateLimitRemaining", String.valueOf(metricsRateLimitRemaining));
@@ -1743,4 +1747,35 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         return "0".equals(String.valueOf(value)) ? "false" : "true";
     }
 
+    /**
+     * Uptime is received in seconds, need to normalize it and make it human readable, like
+     * 1 day(s) 5 hour(s) 12 minute(s) 55 minute(s)
+     * Incoming parameter is may have a decimal point, so in order to safely process this - it's rounded first.
+     * We don't need to add a segment of time if it's 0.
+     *
+     * @param uptimeSeconds value in seconds
+     * @return string value of format 'x day(s) x hour(s) x minute(s) x minute(s)'
+     */
+    private String normalizeUptime(long uptimeSeconds) {
+        StringBuilder normalizedUptime = new StringBuilder();
+
+        long seconds = uptimeSeconds % 60;
+        long minutes = uptimeSeconds % 3600 / 60;
+        long hours = uptimeSeconds % 86400 / 3600;
+        long days = uptimeSeconds / 86400;
+
+        if (days > 0) {
+            normalizedUptime.append(days).append(" day(s) ");
+        }
+        if (hours > 0) {
+            normalizedUptime.append(hours).append(" hour(s) ");
+        }
+        if (minutes > 0) {
+            normalizedUptime.append(minutes).append(" minute(s) ");
+        }
+        if (seconds > 0) {
+            normalizedUptime.append(seconds).append(" second(s)");
+        }
+        return normalizedUptime.toString().trim();
+    }
 }
