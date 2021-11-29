@@ -812,6 +812,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (logger.isDebugEnabled()) {
             logger.debug("Internal init is called.");
         }
+        adapterInitializationTimestamp = System.currentTimeMillis();
         setBaseUri(BASE_ZOOM_URL);
         authorizationToken = getPassword();
 
