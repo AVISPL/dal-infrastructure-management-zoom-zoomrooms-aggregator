@@ -62,7 +62,6 @@ public enum ZoomRoomsSetting {
     CountAttendeesNumberInRoom("meeting:zoom_rooms:count_attendees_number_in_room"),
     /** Property for send_whiteboard_to_internal_contact_only meeting setting */
     SendWhiteboardToInternalContactOnly("meeting:zoom_rooms:send_whiteboard_to_internal_contact_only"),
-
     /** Property for detect_microphone_error_alert meeting setting */
     DetectMicrophoneErrorAlert("alert:client_alert:detect_microphone_error_alert"),
     /** Property for detect_bluetooth_microphone_error_alert meeting setting */
