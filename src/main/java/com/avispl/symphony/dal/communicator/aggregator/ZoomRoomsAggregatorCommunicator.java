@@ -1143,8 +1143,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         // To restore properties that were here before, but to override the rest
         Map<String, String> properties = new HashMap<>(aggregatedZoomRoomDevice.getProperties());
 
-        // properties.put(METRICS_ROOM_STATUS, aggregatedZoomRoomDevice.getProperties().get(METRICS_ROOM_STATUS));
-
         Map<String, String> roomMetricsProperties = zoomRoomsMetricsData.get(roomId);
 
         if (roomMetricsProperties != null) {
