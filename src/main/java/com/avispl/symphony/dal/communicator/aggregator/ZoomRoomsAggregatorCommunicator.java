@@ -79,11 +79,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 // next line will determine whether Zoom monitoring was paused
                 updateAggregatorStatus();
                 if (devicePaused) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(String.format(
-                                "Device adapter did not receive retrieveMultipleStatistics call in %s s. Statistics retrieval and device metadata retrieval is suspended.",
-                                retrieveStatisticsTimeOut / 1000));
-                    }
                     continue mainloop;
                 }
 
