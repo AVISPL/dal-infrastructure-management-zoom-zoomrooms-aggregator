@@ -19,7 +19,7 @@ public class Setting {
      * Colon separated string that looks like this
      * meeting:zoom_rooms:upcoming_meeting_alert
      * which corresponds to settingType:parentNode:settingName
-     *
+     * <p>
      * It is necessary to keep track of this information, for having an easy support for the room/account
      * settings controllable properties.
      *
@@ -37,6 +37,7 @@ public class Setting {
         setting.setSettingName(values[2]);
         return setting;
     }
+
     /**
      * Retrieves {@code {@link #settingType}}
      *
