@@ -72,12 +72,12 @@ public class RoomStatusProcessor {
     public static Map<String, String> processIssuesList(String issuesLine) {
         Map<String, String> issues = new HashMap<>(defaults);
 
-        if(StringUtils.isNullOrEmpty(issuesLine)) {
+        if (StringUtils.isNullOrEmpty(issuesLine)) {
             return issues;
         }
 
         String preparedLine = issuesLine.replace("[", "").replace("]", "").replace("\"", "");
-        for(String value: preparedLine.split(",")) {
+        for (String value : preparedLine.split(",")) {
             String status = knownStatusList.get(value.trim().toLowerCase());
             if (!StringUtils.isNullOrEmpty(status)) {
                 String[] statusDetails = status.split(":");
