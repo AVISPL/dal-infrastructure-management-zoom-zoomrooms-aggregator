@@ -846,7 +846,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
 
         if (executorService != null) {
-            executorService.shutdown();
+            executorService.shutdownNow();
             executorService = null;
         }
 
