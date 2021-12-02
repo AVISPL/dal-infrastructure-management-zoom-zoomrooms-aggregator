@@ -22,6 +22,7 @@ public class PropertyNameConstants {
     public static final String END_CURRENT_MEETING_PROPERTY = "EndCurrentMeeting";
     public static final String RESTART_ZOOM_ROOMS_CLIENT_CONTROL = "RoomControls#RestartZoomRoomsClient";
     public static final String START_ROOM_PMI_CONTROL = "RoomControls#StartRoomPersonalMeeting";
+    public static final String START_ROOM_PMI_CONTROL_PROPERTY = "StartRoomPersonalMeeting";
 
     public static final String ROOM_USER_DETAILS_PMI = "RoomUserDetails#PMI";
     public static final String ROOM_USER_DETAILS_GROUP = "RoomUserDetails#";

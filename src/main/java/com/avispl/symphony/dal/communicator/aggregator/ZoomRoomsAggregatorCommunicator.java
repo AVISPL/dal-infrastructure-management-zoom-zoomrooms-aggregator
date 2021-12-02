@@ -97,7 +97,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         logger.debug("Fetched devices list: " + aggregatedDevices);
                     }
                 } catch (Exception e) {
-                    logger.error("Error occurred during device list retrieval: " + e.getMessage() + " with cause: " + e.getCause().getMessage());
+                    logger.error("Error occurred during device list retrieval: " + e.getMessage() + " with cause: " + e.getCause().getMessage(), e);
                 }
 
                 if (!inProgress) {
@@ -212,7 +212,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * API Token (JWT) used for authorization in Zoom API
-     * */
+     */
     private String authorizationToken;
 
     /**
@@ -224,7 +224,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      * Cached metrics data, retrieved from the resource-heavy API. Since daily request rate is limited - it must be cached
      * and retrieved from the cache. Data is retrieved every {@link #metricsRetrievalTimeout}
-     * */
+     */
     private ConcurrentHashMap<String, Map<String, String>> zoomRoomsMetricsData = new ConcurrentHashMap<>();
 
     /**
@@ -240,12 +240,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * Locations specified for filtering
-     * */
+     */
     private String zoomRoomLocations;
 
     /**
      * Zoom Room types specified for filtering
-     * */
+     */
     private String zoomRoomTypes; // ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly
 
     /**
@@ -259,7 +259,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private volatile boolean serviceRunning;
 
-    /** Device adapter instantiation timestamp. */
+    /**
+     * Device adapter instantiation timestamp.
+     */
     private long adapterInitializationTimestamp;
 
     /**
@@ -331,7 +333,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * Size of a room responses, in pages.
-     * */
+     */
     private int roomRequestPageSize = 5000;
 
     /**
@@ -420,17 +422,17 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      * Executor that runs all the async operations, that {@link #deviceDataLoader} is posting and
      * {@link #devicesExecutionPool} is keeping track of
-     * */
+     */
     private static ExecutorService executorService;
 
     /**
      * Runner service responsible for collecting data and posting processes to {@link #devicesExecutionPool}
-     * */
+     */
     private ZoomRoomsDeviceDataLoader deviceDataLoader;
 
     /**
      * Pool for keeping all the async operations in, to track any operations in progress and cancel them if needed
-     * */
+     */
     private List<Future> devicesExecutionPool = new ArrayList<>();
 
     /**
@@ -793,7 +795,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
         statistics.put("AdapterVersion", adapterProperties.getProperty("mock.aggregator.version"));
         statistics.put("AdapterBuildDate", adapterProperties.getProperty("mock.aggregator.build.date"));
-        statistics.put("AdapterUptime", normalizeUptime((System.currentTimeMillis() - adapterInitializationTimestamp)/1000));
+        statistics.put("AdapterUptime", normalizeUptime((System.currentTimeMillis() - adapterInitializationTimestamp) / 1000));
 
         if (metricsRateLimitRemaining != null) {
             statistics.put("DashboardMetricsDailyRateLimitRemaining", String.valueOf(metricsRateLimitRemaining));
@@ -994,11 +996,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             zoomRooms.addAll(aggregatedDeviceProcessor.extractDevices(retrieveZoomRooms(null)));
         }
 
+        List<String> retrievedRoomIds = new ArrayList<>();
         zoomRooms.forEach(aggregatedDevice -> {
-            if (aggregatedDevices.containsKey(aggregatedDevice.getDeviceId())) {
-                aggregatedDevices.get(aggregatedDevice.getDeviceId()).setDeviceOnline(aggregatedDevice.getDeviceOnline());
+            String deviceId = aggregatedDevice.getDeviceId();
+            retrievedRoomIds.add(deviceId);
+            if (aggregatedDevices.containsKey(deviceId)) {
+                aggregatedDevices.get(deviceId).setDeviceOnline(aggregatedDevice.getDeviceOnline());
             } else {
-                aggregatedDevices.put(aggregatedDevice.getDeviceId(), aggregatedDevice);
+                aggregatedDevices.put(deviceId, aggregatedDevice);
             }
         });
 
@@ -1006,7 +1011,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             logger.debug("Updated ZoomRooms devices metadata: " + aggregatedDevices);
         }
         // Remove rooms that were not populated by the API
-        List<String> retrievedRoomIds = zoomRooms.stream().map(AggregatedDevice::getDeviceId).collect(Collectors.toList());
         aggregatedDevices.keySet().removeIf(existingDevice -> !retrievedRoomIds.contains(existingDevice));
 
         if (zoomRooms.isEmpty()) {
@@ -1144,7 +1148,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         // To restore properties that were here before, but to override the rest
         Map<String, String> properties = new HashMap<>(aggregatedZoomRoomDevice.getProperties());
 
-        properties.put(METRICS_ROOM_STATUS, aggregatedZoomRoomDevice.getProperties().get(METRICS_ROOM_STATUS));
+        // properties.put(METRICS_ROOM_STATUS, aggregatedZoomRoomDevice.getProperties().get(METRICS_ROOM_STATUS));
 
         Map<String, String> roomMetricsProperties = zoomRoomsMetricsData.get(roomId);
 
@@ -1225,6 +1229,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param controllableProperties list of controllable properties, to add controls to
      */
     private void populateRoomSettings(String roomId, Map<String, String> properties, List<AdvancedControllableProperty> controllableProperties) throws Exception {
+        if (!displayRoomSettings) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Room settings retrieval is switched off by displayRoomSettings property.");
+            }
+            return;
+        }
         Long dataRetrievalTimestamp = validRoomSettingsDataRetrievalPeriodTimestamps.get(roomId);
         long currentTimestamp = System.currentTimeMillis();
         long roomSettingsProperties = properties.keySet().stream().filter(s -> s.startsWith(ROOM_CONTROLS_ALERT_SETTINGS_GROUP) || s.startsWith(ROOM_CONTROLS_MEETING_SETTINGS_GROUP)).count();
@@ -1232,12 +1242,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Room settings retrieval is in cooldown. %s seconds left",
                         (dataRetrievalTimestamp - currentTimestamp) / 1000));
-            }
-            return;
-        }
-        if (!displayRoomSettings) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("Room settings retrieval is switched off by displayRoomSettings property.");
             }
             return;
         }
@@ -1385,25 +1389,25 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         cleanupStaleControls(controllableProperties, ROOM_CONTROLS_GROUP);
 
         String roomStatus = properties.get(METRICS_ROOM_STATUS);
-        if (!StringUtils.isNullOrEmpty(roomStatus) && (roomStatus.equals("InMeeting") || roomStatus.equals("Connecting"))) {
-            properties.put(END_CURRENT_MEETING_CONTROL, "");
-            controllableProperties.add(createButton(END_CURRENT_MEETING_CONTROL, "End", "Ending...", 0L));
+        if (!StringUtils.isNullOrEmpty(roomStatus)) {
+            if ((roomStatus.equals("InMeeting") || roomStatus.equals("Connecting"))) {
+                properties.put(END_CURRENT_MEETING_CONTROL, "");
+                controllableProperties.add(createButton(END_CURRENT_MEETING_CONTROL, "End", "Ending...", 0L));
 
-            properties.put(LEAVE_CURRENT_MEETING_CONTROL, "");
-            controllableProperties.add(createButton(LEAVE_CURRENT_MEETING_CONTROL, "Leave", "Leaving...", 0L));
+                properties.put(LEAVE_CURRENT_MEETING_CONTROL, "");
+                controllableProperties.add(createButton(LEAVE_CURRENT_MEETING_CONTROL, "Leave", "Leaving...", 0L));
 
-            properties.remove(START_ROOM_PMI_CONTROL);
-        } else if (!StringUtils.isNullOrEmpty(roomStatus) && !roomStatus.equals("Offline")) {
-            properties.put(START_ROOM_PMI_CONTROL, "");
-            controllableProperties.add(createButton(START_ROOM_PMI_CONTROL, "Start", "Starting...", 0L));
+                properties.remove(START_ROOM_PMI_CONTROL);
+            } else if (!roomStatus.equals("Offline")) {
+                properties.put(START_ROOM_PMI_CONTROL, "");
+                properties.put(RESTART_ZOOM_ROOMS_CLIENT_CONTROL, "");
 
-            properties.remove(END_CURRENT_MEETING_CONTROL);
-            properties.remove(LEAVE_CURRENT_MEETING_CONTROL);
-        }
+                controllableProperties.add(createButton(RESTART_ZOOM_ROOMS_CLIENT_CONTROL, "Restart", "Restarting...", 0L));
+                controllableProperties.add(createButton(START_ROOM_PMI_CONTROL, "Start", "Starting...", 0L));
 
-        if (!StringUtils.isNullOrEmpty(roomStatus) && !roomStatus.equals("Offline")) {
-            properties.put(RESTART_ZOOM_ROOMS_CLIENT_CONTROL, "");
-            controllableProperties.add(createButton(RESTART_ZOOM_ROOMS_CLIENT_CONTROL, "Restart", "Restarting...", 0L));
+                properties.remove(END_CURRENT_MEETING_CONTROL);
+                properties.remove(LEAVE_CURRENT_MEETING_CONTROL);
+            }
         }
     }
 
@@ -1431,7 +1435,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 // Need to cleanup live meeting information an remove metrics data from
                 cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
                 zoomRoomsMetricsData.get(roomId).put(METRICS_ROOM_STATUS, "Available");
-            } else if (propertyName.endsWith("StartRoomPersonalMeeting")) {
+            } else if (propertyName.endsWith(START_ROOM_PMI_CONTROL_PROPERTY)) {
                 properties.put(METRICS_ROOM_STATUS, "Connecting");
                 zoomRoomsMetricsData.get(roomId).put(METRICS_ROOM_STATUS, "Connecting");
             }
@@ -1582,7 +1586,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if a communication error occurs
      */
     private JsonNode retrieveAccountSettings(String type) throws Exception {
-        return doGetWithRetry(String.format(ZOOM_ROOM_ACCOUNT_SETTINGS_URL) + "?setting_type=" + type);
+        return doGetWithRetry(ZOOM_ROOM_ACCOUNT_SETTINGS_URL + "?setting_type=" + type);
     }
 
     /**
