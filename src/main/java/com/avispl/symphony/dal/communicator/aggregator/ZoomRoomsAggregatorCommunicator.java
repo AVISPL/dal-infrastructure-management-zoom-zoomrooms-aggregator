@@ -1413,6 +1413,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private void updateCachedControllablePropertyValue(String roomId, String propertyName, String value) {
         AggregatedDevice aggregatedDevice = aggregatedDevices.get(roomId);
+        if (aggregatedDevice == null) {
+            return;
+        }
         List<AdvancedControllableProperty> advancedControllableProperties = aggregatedDevice.getControllableProperties();
         Map<String, String> properties = aggregatedDevice.getProperties();
 

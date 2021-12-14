@@ -5,7 +5,7 @@ models:
       node: rooms
       filter: get("room_id") != null
       mapping:
-        deviceType: Computer
+        type: Computer
         category: Zoom Rooms
         serialNumber: get("id")
         deviceId: get("room_id")
