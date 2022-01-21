@@ -6,7 +6,7 @@
 
     <groupId>com.avispl.symphony.dal.device.aggregator.zoom.rooms</groupId>
     <artifactId>symphony-dal-communicator-aggregator-zoom-rooms</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <properties>
         <symphonyApiVersion>5.3.0</symphonyApiVersion>
         <timestamp>${maven.build.timestamp}</timestamp>
