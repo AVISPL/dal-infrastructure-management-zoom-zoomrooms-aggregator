@@ -290,7 +290,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final long defaultRoomDevicesTimeout = 60 * 1000 / 2;
 
     /**
-     * Default limit for {@link #meetingDetailsDailyRequestRateThreshold}
+     * Default limit for {@link #liveMeetingDetailsDailyRequestRateThreshold}
      */
     private static final int defaultMeetingDetailsDailyRequestRateThreshold = 5000;
 
@@ -307,9 +307,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private long deviceMetaDataRetrievalTimeout = 60 * 1000 / 2;
 
     /**
-     * Device metrics retrieval timeout. The general devices list is retrieved once during this time period.
+     * Device metrics retrieval timeout. Device metrics are retrieved once during this time period.
      */
     private long metricsRetrievalTimeout = 60 * 1000 / 2;
+
+    /**
+     * Active conference details retrieval timeout. Active conference details are retrieved once during this time period.
+     */
+    private long liveMeetingDetailsRetrievalTimeout = 60 * 1000 / 2;
 
     /**
      * Room user details retrieval timeout. Info is retrieved once during this time period.
@@ -336,7 +341,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * If {@link #metricsRateLimitRemaining} is less than this value - metrics details are not populated
      * (except for the general metrics data)
      */
-    private int meetingDetailsDailyRequestRateThreshold = 5000;
+    private int liveMeetingDetailsDailyRequestRateThreshold = 5000;
 
     /**
      * Whether or not to show the LiveMeeting details for the rooms that have status InMeeting
@@ -371,7 +376,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Time period within which the device meetings metrics (dynamic information) cannot be refreshed (per room).
      * Ignored if metrics data is not yet retrieved
      */
-    private ConcurrentHashMap<String, Long> validMeetingsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, Long> validLiveMeetingsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
 
     /**
      * Map of roomUserId:timestamp within which the room user details cannot be refreshed.
@@ -431,21 +436,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private List<Future> devicesExecutionPool = new ArrayList<>();
 
     /**
-     * Retrieves {@code {@link #meetingDetailsDailyRequestRateThreshold }}
+     * Retrieves {@code {@link #liveMeetingDetailsDailyRequestRateThreshold }}
      *
-     * @return value of {@link #meetingDetailsDailyRequestRateThreshold}
+     * @return value of {@link #liveMeetingDetailsDailyRequestRateThreshold}
      */
-    public int getMeetingDetailsDailyRequestRateThreshold() {
-        return meetingDetailsDailyRequestRateThreshold;
+    public int getLiveMeetingDetailsDailyRequestRateThreshold() {
+        return liveMeetingDetailsDailyRequestRateThreshold;
     }
 
     /**
      * Sets {@code meetingDetailsBottomRateLimit}
      *
-     * @param meetingDetailsDailyRequestRateThreshold the {@code int} field
+     * @param liveMeetingDetailsDailyRequestRateThreshold the {@code int} field
      */
-    public void setMeetingDetailsDailyRequestRateThreshold(int meetingDetailsDailyRequestRateThreshold) {
-        this.meetingDetailsDailyRequestRateThreshold = Math.max(meetingDetailsDailyRequestRateThreshold, defaultMeetingDetailsDailyRequestRateThreshold);
+    public void setLiveMeetingDetailsDailyRequestRateThreshold(int liveMeetingDetailsDailyRequestRateThreshold) {
+        this.liveMeetingDetailsDailyRequestRateThreshold = Math.max(liveMeetingDetailsDailyRequestRateThreshold, defaultMeetingDetailsDailyRequestRateThreshold);
     }
 
     /**
@@ -554,6 +559,24 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     public void setMetricsRetrievalTimeout(long metricsRetrievalTimeout) {
         this.metricsRetrievalTimeout = Math.max(defaultMetricsTimeout, metricsRetrievalTimeout);
+    }
+
+    /**
+     * Retrieves {@code {@link #liveMeetingDetailsRetrievalTimeout }}
+     *
+     * @return value of {@link #liveMeetingDetailsRetrievalTimeout}
+     */
+    public long getLiveMeetingDetailsRetrievalTimeout() {
+        return liveMeetingDetailsRetrievalTimeout;
+    }
+
+    /**
+     * Sets {@code activeConferenceDetailsRetrievalTimeout}
+     *
+     * @param liveMeetingDetailsRetrievalTimeout the {@code long} field
+     */
+    public void setLiveMeetingDetailsRetrievalTimeout(long liveMeetingDetailsRetrievalTimeout) {
+        this.liveMeetingDetailsRetrievalTimeout = liveMeetingDetailsRetrievalTimeout;
     }
 
     /**
@@ -853,7 +876,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         validUserDetailsDataRetrievalPeriodTimestamps.clear();
         validRoomDevicesDataRetrievalPeriodTimestamps.clear();
         validRoomSettingsDataRetrievalPeriodTimestamps.clear();
-        validMeetingsDataRetrievalPeriodTimestamps.clear();
+        validLiveMeetingsDataRetrievalPeriodTimestamps.clear();
         super.internalDestroy();
     }
 
@@ -1501,7 +1524,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private void retrieveZoomRoomMetricsDetails(String roomId, Map<String, String> properties) throws Exception {
         long currentTimestamp = System.currentTimeMillis();
-        Long dataRetrievalTimestamp = validMeetingsDataRetrievalPeriodTimestamps.get(roomId);
+        Long dataRetrievalTimestamp = validLiveMeetingsDataRetrievalPeriodTimestamps.get(roomId);
         if (dataRetrievalTimestamp != null && dataRetrievalTimestamp > currentTimestamp) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Meeting metrics retrieval is in cooldown. %s seconds left",
@@ -1512,17 +1535,17 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         // Metrics retrieval timeout is used so this information is retrieve once per general metrics refresh period.
         // First full metrics payload is retrieved, then the details (if necessary), an only once. Next iteration
         // will happen after general metrics data refreshed.
-        validMeetingsDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + metricsRetrievalTimeout);
+        validLiveMeetingsDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + liveMeetingDetailsRetrievalTimeout);
 
         // Need to cleanup stale properties before checking whether it is generally allowed to fetch these properties anymore.
         // So if it isn't allowed - properties are removed for good.
         cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
 
-        if (metricsRateLimitRemaining == null || metricsRateLimitRemaining < meetingDetailsDailyRequestRateThreshold) {
+        if (metricsRateLimitRemaining == null || metricsRateLimitRemaining < liveMeetingDetailsDailyRequestRateThreshold) {
             if (logger.isDebugEnabled()) {
                 logger.debug(String.format("Skipping collection of meeting details for room %s. Remaining metrics rate limit: %s", roomId, metricsRateLimitRemaining));
             }
-            properties.put(LIVE_MEETING_GROUP_WARNING, String.format("Daily request rate threshold of %s for the Meeting Dashboard API was reached.", meetingDetailsDailyRequestRateThreshold));
+            properties.put(LIVE_MEETING_GROUP_WARNING, String.format("Daily request rate threshold of %s for the Meeting Dashboard API was reached.", liveMeetingDetailsDailyRequestRateThreshold));
             return;
         }
         if (!displayLiveMeetingDetails) {
