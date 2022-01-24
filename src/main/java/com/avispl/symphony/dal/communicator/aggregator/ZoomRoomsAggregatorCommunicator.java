@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 AVI-SPL, Inc. All Rights Reserved.
+ * Copyright (c) 2021-2022 AVI-SPL, Inc. All Rights Reserved.
  */
 package com.avispl.symphony.dal.communicator.aggregator;
 
@@ -313,6 +313,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * Active conference details retrieval timeout. Active conference details are retrieved once during this time period.
+     * @since 1.0.1
      */
     private long liveMeetingDetailsRetrievalTimeout = 60 * 1000 / 2;
 
@@ -446,6 +447,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * Sets {@code meetingDetailsBottomRateLimit}
+     * if the value is less than {@link #defaultMeetingDetailsDailyRequestRateThreshold} - use latter as a value for
+     * {@link #liveMeetingDetailsDailyRequestRateThreshold}
      *
      * @param liveMeetingDetailsDailyRequestRateThreshold the {@code int} field
      */
@@ -565,6 +568,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Retrieves {@code {@link #liveMeetingDetailsRetrievalTimeout }}
      *
      * @return value of {@link #liveMeetingDetailsRetrievalTimeout}
+     * @since 1.0.1
      */
     public long getLiveMeetingDetailsRetrievalTimeout() {
         return liveMeetingDetailsRetrievalTimeout;
