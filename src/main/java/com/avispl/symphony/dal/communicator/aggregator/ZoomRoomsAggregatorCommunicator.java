@@ -1504,6 +1504,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 for (JsonNode metric : roomsMetrics.get("zoom_rooms")) {
                     Map<String, String> metricsData = new HashMap<>();
                     aggregatedDeviceProcessor.applyProperties(metricsData, metric, "ZoomRoomMetrics");
+                    metricsData.put("Metrics#DataRetrievedAt", String.valueOf(new Date()));
                     zoomRoomsMetricsData.put(metric.get("id").asText(), metricsData);
                 }
             }
@@ -1563,6 +1564,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             JsonNode roomsMetrics = doGet(String.format(ZOOM_ROOM_METRICS_DETAILS, roomId), JsonNode.class);
             if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("live_meeting")) {
                 aggregatedDeviceProcessor.applyProperties(properties, roomsMetrics, "ZoomRoomMeeting");
+                properties.put("LiveMeeting#DataRetrievedAt", String.valueOf(new Date()));
             }
             if (logger.isDebugEnabled()) {
                 logger.debug("Retrieve ZoomRooms deeting details for room: " + roomId);
