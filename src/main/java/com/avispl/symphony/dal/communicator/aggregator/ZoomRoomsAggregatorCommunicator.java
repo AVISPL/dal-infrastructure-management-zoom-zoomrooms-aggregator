@@ -33,6 +33,7 @@ import org.springframework.web.client.RestTemplate;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
@@ -430,6 +431,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Runner service responsible for collecting data and posting processes to {@link #devicesExecutionPool}
      */
     private ZoomRoomsDeviceDataLoader deviceDataLoader;
+
+    /**
+     * Format date for utility purposes
+     * @since 1.0.1
+     */
+    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'hh:mm:ss'Z'");
 
     /**
      * Pool for keeping all the async operations in, to track any operations in progress and cancel them if needed
@@ -839,6 +846,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         adapterInitializationTimestamp = System.currentTimeMillis();
         setBaseUri(BASE_ZOOM_URL);
         authorizationToken = getPassword();
+        // To synchronize with the format that Zoom API provides
+        dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
 
         executorService = Executors.newFixedThreadPool(8);
         executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
@@ -1504,6 +1513,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 for (JsonNode metric : roomsMetrics.get("zoom_rooms")) {
                     Map<String, String> metricsData = new HashMap<>();
                     aggregatedDeviceProcessor.applyProperties(metricsData, metric, "ZoomRoomMetrics");
+                    metricsData.put(METRICS_DATA_RETRIEVED_TIME, dateFormat.format(new Date()));
                     zoomRoomsMetricsData.put(metric.get("id").asText(), metricsData);
                 }
             }
@@ -1563,6 +1573,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             JsonNode roomsMetrics = doGet(String.format(ZOOM_ROOM_METRICS_DETAILS, roomId), JsonNode.class);
             if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("live_meeting")) {
                 aggregatedDeviceProcessor.applyProperties(properties, roomsMetrics, "ZoomRoomMeeting");
+                properties.put(LIVE_MEETING_DATA_RETRIEVED_TIME, dateFormat.format(new Date()));
             }
             if (logger.isDebugEnabled()) {
                 logger.debug("Retrieve ZoomRooms deeting details for room: " + roomId);

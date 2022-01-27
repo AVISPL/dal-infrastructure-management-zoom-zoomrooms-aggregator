@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - 'release/**'
+      - 'bugfix/**'
 jobs:
   prep:
     runs-on: ubuntu-latest
