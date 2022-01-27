@@ -434,6 +434,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * Format date for utility purposes
+     * @since 1.0.1
      */
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'hh:mm:ss'Z'");
 
