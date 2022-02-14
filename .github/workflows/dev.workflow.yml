@@ -19,7 +19,7 @@ jobs:
       uses: actions/setup-java@v2
       with:
         distribution: adopt
-        java-version: 8.0.322+6
+        java-version: 8
         overwrite-settings: false
     - id: date
       run: echo "::set-output name=date::$(date +'%y%m%d' | cut -c 2-)"
@@ -44,7 +44,7 @@ jobs:
       uses: actions/setup-java@v2
       with:
         distribution: adopt
-        java-version: 8.0.322+6
+        java-version: 8
         overwrite-settings: false
     - name: Version set
       run: mvn versions:set versions:commit -DnewVersion=${{ needs.versiongenerate.outputs.version }}
