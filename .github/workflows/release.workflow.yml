@@ -8,7 +8,7 @@ on:
       - 'bugfix/**'
 jobs:
   prep:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     outputs:
       rev: ${{ steps.shortrev.outputs.rev }}
       ver: ${{ steps.pversion.outputs.ver }}
@@ -28,7 +28,7 @@ jobs:
     - id: pversion
       run: echo ::set-output name=ver::$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout| sed -e 's/-SNAPSHOT//g')
   versiongenerate:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     needs: prep
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -36,7 +36,7 @@ jobs:
     - id: version
       run: echo ::set-output name=version::${{ needs.prep.outputs.ver }}-${{ needs.prep.outputs.date }}-${{ needs.prep.outputs.rev }}
   build:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     needs: versiongenerate
     steps:
     - uses: actions/checkout@v2
