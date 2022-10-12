@@ -22,12 +22,12 @@ public class ZoomRoomsAggregatorCommunicatorTest {
         mockAggregatorCommunicator.setHost("api.zoom.us");
         mockAggregatorCommunicator.setProtocol("https");
         mockAggregatorCommunicator.setPort(443);
-        mockAggregatorCommunicator.init();
-        mockAggregatorCommunicator.authenticate();
+
     }
 
     @Test
     public void getDevicesWithFilteringTest() throws Exception {
+        mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.setZoomRoomTypes("ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly");
         mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);
@@ -66,7 +66,55 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     }
 
     @Test
+    public void getDevicesWithFilteringTestOAuth() throws Exception {
+        mockAggregatorCommunicator.setLogin("rW1Kedu5QV2m24XI8h0SIQ");
+        mockAggregatorCommunicator.setPassword("aj2Dlq9V2fVO8ur4Qqtgt6Q8QyAYNSUB");
+        mockAggregatorCommunicator.init();
+
+        mockAggregatorCommunicator.setDisplayRoomSettings(true);
+        mockAggregatorCommunicator.setAccountId("h8M_rmTuQsyDaZhp_xMyoQ");
+        mockAggregatorCommunicator.setAuthenticationType("OAuth");
+        mockAggregatorCommunicator.setZoomRoomTypes("ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(30000);
+        List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        mockAggregatorCommunicator.getMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(22, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
+
+        mockAggregatorCommunicator.setZoomRoomTypes(" DigitalSignageOnly");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertTrue(devices.isEmpty());
+
+        mockAggregatorCommunicator.setZoomRoomTypes("");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(22, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
+
+        mockAggregatorCommunicator.setZoomRoomLocations("SomeLocationThatNoneOfTheDevicesHave");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertTrue(devices.isEmpty());
+
+        mockAggregatorCommunicator.setZoomRoomLocations("");
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Assert.assertFalse(devices.isEmpty());
+        Assert.assertEquals(22, devices.size());
+        Assert.assertNotNull(devices.get(0).getSerialNumber());
+    }
+
+    @Test
     public void getDevicesWithLocationsFilteringTest() throws Exception {
+        mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.setDisplayRoomSettings(true);
         mockAggregatorCommunicator.setZoomRoomLocations("Chicago,Arizona");
         mockAggregatorCommunicator.retrieveMultipleStatistics();
@@ -95,6 +143,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void getDevicesWithDelayTest() throws Exception {
+        mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.setMetricsRetrievalTimeout(90000);
         mockAggregatorCommunicator.setDeviceMetaDataRetrievalTimeout(60000);
         mockAggregatorCommunicator.setRoomDevicesRetrievalTimeout(60000);
@@ -127,12 +176,15 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void pingTest() throws Exception {
+        mockAggregatorCommunicator.init();
         int pingLatency = mockAggregatorCommunicator.ping();
         Assert.assertNotEquals(0, pingLatency);
         System.out.println("Ping latency calculated: " + pingLatency);
     }
+
     @Test
     public void getAggregatorDataTest() throws Exception {
+        mockAggregatorCommunicator.init();
         List<Statistics> statistics = mockAggregatorCommunicator.getMultipleStatistics();
         Assert.assertEquals(1, statistics.size());
         Assert.assertNotNull(statistics.get(0));
@@ -140,6 +192,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void controlRoomSettingTest() throws Exception {
+        mockAggregatorCommunicator.init();
         String roomId = "KJmeDJOMQDmh3gczMXCxFQ";
         String property = "RoomMeetingSettings#UpcomingMeetingAlert";
         ControllableProperty controllableProperty = new ControllableProperty();
@@ -164,6 +217,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void controlNumericRoomSettingTest() throws Exception {
+        mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(60000);
 
