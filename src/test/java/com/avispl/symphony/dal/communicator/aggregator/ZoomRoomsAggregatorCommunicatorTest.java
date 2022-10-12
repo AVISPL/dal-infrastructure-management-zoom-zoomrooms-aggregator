@@ -69,6 +69,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     public void getDevicesWithFilteringTestOAuth() throws Exception {
         mockAggregatorCommunicator.setLogin("rW1Kedu5QV2m24XI8h0SIQ");
         mockAggregatorCommunicator.setPassword("***REMOVED***");
+       // mockAggregatorCommunicator.setPassword("eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImlzcyI6IlVsZVhRY0pfVF9Xc1UzcFhLb2VuWHciLCJleHAiOjE2NzI0Mzc2MDAsImlhdCI6MTY0MjA4MjcwMH0.u16RvpxohjtKZNUnhyzIO2ysUdEKe6gyY5RtsPYSlp4");
         mockAggregatorCommunicator.init();
 
         mockAggregatorCommunicator.setDisplayRoomSettings(true);

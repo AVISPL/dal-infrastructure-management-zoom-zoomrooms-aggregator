@@ -958,15 +958,22 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     public List<Statistics> getMultipleStatistics() throws Exception {
-
+        if (knownErrors.containsKey(LOGIN_ERROR_KEY)) {
+            throw new FailedLoginException(knownErrors.get(LOGIN_ERROR_KEY));
+        }
         Map<String, String> statistics = new HashMap<>();
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
 
         List<AdvancedControllableProperty> accountSettingsControls = new ArrayList<>();
         if (displayAccountSettings) {
-            aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
-            aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
-
+            JsonNode meetingSettings = retrieveAccountSettings("meeting");
+            if (meetingSettings != null) {
+                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
+            }
+            JsonNode alertSettings = retrieveAccountSettings("alert");
+            if (alertSettings != null) {
+                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
+            }
 //        // if the property isn't there - we should not display this control and its label
             accountSettingsControls.removeIf(advancedControllableProperty -> {
                 String value = String.valueOf(advancedControllableProperty.getValue());
@@ -1016,8 +1023,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         serviceRunning = true;
 
         super.internalInit();
-
-        authenticate();
     }
 
     /**
@@ -1305,7 +1310,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private JsonNode doGetWithRetry(String url) throws Exception {
         int retryAttempts = 0;
         Exception lastError = null;
-
+        boolean criticalError = false;
         while (retryAttempts++ < 10 && serviceRunning) {
             try {
                 return doGet(url, JsonNode.class);
@@ -1314,6 +1319,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 if (e.getStatusCode() != 429) {
                     // Might be 401, 403 or any other error code here so the code will just get stuck
                     // cycling this failed request until it's fixed. So we need to skip this scenario.
+                    criticalError = true;
                     logger.error(String.format("ZoomRooms API error %s while retrieving %s data", e.getStatusCode(), url), e);
                     break;
                 }
@@ -1321,6 +1327,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 lastError = e;
                 // if service is running, log error
                 if (serviceRunning) {
+                    criticalError = true;
                     logger.error(String.format("ZoomRooms API error while retrieving %s data", url), e);
                 }
                 break;
@@ -1328,8 +1335,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             TimeUnit.MILLISECONDS.sleep(200);
         }
 
-        if (retryAttempts == 10 && serviceRunning) {
-            // if we got here, all 10 attempts failed
+        if (retryAttempts == 10 && serviceRunning || criticalError) {
+            // if we got here, all 10 attempts failed, or this is a login error that doesn't imply retry attempts
             if (lastError instanceof CommandFailureException) {
                 int code = ((CommandFailureException)lastError).getStatusCode();
                 if (code == 401 || code == 403) {
@@ -2014,27 +2021,39 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @since 1.1.0
      * */
     private void generateAccessToken() throws Exception {
+        System.out.println("Generating access token...");
         if (StringUtils.isNullOrEmpty(accountId)) {
-            throw new IllegalArgumentException("Unable to log in using OAuth: no accountId provided");
+            String message = "Unable to log in using OAuth: no accountId provided";
+            knownErrors.put(LOGIN_ERROR_KEY, message);
+            throw new IllegalArgumentException(message);
         }
         if (StringUtils.isNullOrEmpty(getLogin())) {
-            throw new IllegalArgumentException("Unable to log in using OAuth: no clientId provided");
+            String message = "Unable to log in using OAuth: no clientId provided";
+            knownErrors.put(LOGIN_ERROR_KEY, message);
+            throw new IllegalArgumentException(message);
         }
         if (StringUtils.isNullOrEmpty(getPassword())) {
-            throw new IllegalArgumentException("Unable to log in using OAuth: no clientSecret provided");
+            String message = "Unable to log in using OAuth: no clientSecret provided";
+            knownErrors.put(LOGIN_ERROR_KEY, message);
+            throw new IllegalArgumentException(message);
         }
         JsonNode response = doPost(String.format("%s://%s/%s", getProtocol(), zoomOAuthHostname, ZOOM_ROOM_OAUTH_URL + String.format(ZOOM_ROOM_OAUTH_PARAMS_URL, accountId)), null, JsonNode.class);
         if (response == null) {
-            throw new FailedLoginException(String.format("Failed to authorize account with id %s through OAuth chain. Please check client data or OAuth application settings.", accountId));
+            String message = String.format("Failed to authorize account with id %s through OAuth chain. Please check client data or OAuth application settings.", accountId);
+            knownErrors.put(LOGIN_ERROR_KEY, message);
+            throw new FailedLoginException(message);
         }
         Map<String, String> oauthResponseData = new HashMap<>();
         aggregatedDeviceProcessor.applyProperties(oauthResponseData, response, "OAuthResponse");
         if (oauthResponseData.isEmpty() || !oauthResponseData.containsKey("AccessToken")) {
-            throw new FailedLoginException(String.format("Failed to retrieve an OAuth access token for account with id %s. Please check client data or OAuth application settings.", accountId));
+            String message = String.format("Failed to retrieve an OAuth access token for account with id %s. Please check client data or OAuth application settings.", accountId);
+            knownErrors.put(LOGIN_ERROR_KEY, message);
+            throw new FailedLoginException(message);
         }
         oAuthAccessToken = oauthResponseData.get("AccessToken");
         oauthTokenExpiresIn = Integer.parseInt(oauthResponseData.get("ExpiresIn")) * 1000L;
         oauthTokenGeneratedTimestamp = System.currentTimeMillis();
+        knownErrors.remove(LOGIN_ERROR_KEY);
     }
 
     /**
