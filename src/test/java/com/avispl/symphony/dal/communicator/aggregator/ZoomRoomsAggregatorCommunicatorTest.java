@@ -18,7 +18,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     @BeforeEach
     public void init() throws Exception {
         mockAggregatorCommunicator = new ZoomRoomsAggregatorCommunicator();
-        mockAggregatorCommunicator.setPassword("eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImlzcyI6IlVsZVhRY0pfVF9Xc1UzcFhLb2VuWHciLCJleHAiOjE2NDA5NDQ4MDAsImlhdCI6MTYzMjE0MzI0N30.MV8UxVW-SfyqcrdjSM8fKSJluW1hrWoSPGsA5N0Mq4c");
+        mockAggregatorCommunicator.setPassword("iLCJleHAiOjE2NDA5NDQ4MDAsImlhdCI6MTYzJluW1hrWoSPGsA5N0Mq4c");
         mockAggregatorCommunicator.setHost("api.zoom.us");
         mockAggregatorCommunicator.setProtocol("https");
         mockAggregatorCommunicator.setPort(443);
@@ -67,9 +67,8 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void getDevicesWithFilteringTestOAuth() throws Exception {
-        mockAggregatorCommunicator.setLogin("rW1Kedu5QV2m24XI8h0SIQ");
-        mockAggregatorCommunicator.setPassword("aj2Dlq9V2fVO8ur4Qqtgt6Q8QyAYNSUB");
-       // mockAggregatorCommunicator.setPassword("eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImlzcyI6IlVsZVhRY0pfVF9Xc1UzcFhLb2VuWHciLCJleHAiOjE2NzI0Mzc2MDAsImlhdCI6MTY0MjA4MjcwMH0.u16RvpxohjtKZNUnhyzIO2ysUdEKe6gyY5RtsPYSlp4");
+        mockAggregatorCommunicator.setLogin("rW1Kedu_I8h0SIQ");
+        mockAggregatorCommunicator.setPassword("aj2Dlq_8QyAYNSUB");
         mockAggregatorCommunicator.init();
 
         mockAggregatorCommunicator.setDisplayRoomSettings(true);
