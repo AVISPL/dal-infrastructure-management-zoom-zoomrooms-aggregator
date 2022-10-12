@@ -173,19 +173,19 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-web</artifactId>
-            <version>5.2.6.RELEASE</version>
+            <version>5.2.22.RELEASE</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-expression</artifactId>
-            <version>5.2.6.RELEASE</version>
+            <version>5.2.22.RELEASE</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context-support</artifactId>
-            <version>5.2.6.RELEASE</version>
+            <version>5.2.22.RELEASE</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
