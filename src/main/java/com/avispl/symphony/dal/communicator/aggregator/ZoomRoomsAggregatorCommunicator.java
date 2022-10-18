@@ -218,7 +218,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String ZOOM_ROOM_ACCOUNT_SETTINGS_URL = "rooms/account_settings";
     private static final String ZOOM_ROOMS_METRICS_URL = "metrics/zoomrooms?page_size=%s";
     private static final String ZOOM_ROOM_LOCATIONS_URL = "rooms/locations?page_size=%s";
-    private static final String ZOOM_USER_DETAILS_URL = "/users/%s"; // Requires room user id
+    private static final String ZOOM_USER_DETAILS_URL = "users/%s"; // Requires room user id
     private static final String ZOOM_ROOM_METRICS_DETAILS_URL = "metrics/zoomrooms/%s"; // Required room id
 
     /**
@@ -233,8 +233,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * */
     private static final String ZOOM_ROOM_OAUTH_URL = "oauth/token";
 
-    private static final String ZOOM_ROOM_CLIENT_RPC_URL = "/rooms/%s/zrclient"; // Required room user id
-    private static final String ZOOM_ROOM_CLIENT_RPC_MEETINGS_URL = "/rooms/%s/meetings"; // Required room user id
+    private static final String ZOOM_ROOM_CLIENT_RPC_URL = "rooms/%s/zrclient"; // Required room user id
+    private static final String ZOOM_ROOM_CLIENT_RPC_MEETINGS_URL = "rooms/%s/meetings"; // Required room user id
 
     private AggregatedDeviceProcessor aggregatedDeviceProcessor;
 
@@ -1610,6 +1610,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         cleanupStaleProperties(properties, ROOM_CONTROLS_GROUP);
         cleanupStaleControls(controllableProperties, ROOM_CONTROLS_GROUP);
 
+        if (authenticationType == AuthenticationType.OAuth) {
+            if(logger.isDebugEnabled()) {
+                logger.debug("RoomControls group is omitted: authenticationType is set to OAuth");
+            }
+            return;
+        }
         String roomStatus = properties.get(METRICS_ROOM_STATUS);
         if (!StringUtils.isNullOrEmpty(roomStatus)) {
             if ((roomStatus.equals("InMeeting") || roomStatus.equals("Connecting"))) {
