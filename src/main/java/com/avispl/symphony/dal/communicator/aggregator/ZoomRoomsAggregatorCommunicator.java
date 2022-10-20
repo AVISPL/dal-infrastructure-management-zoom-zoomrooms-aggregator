@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
@@ -195,7 +196,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
                 }
             }
-            if (authenticationType == AuthenticationType.OAuth && !path.contains(ZOOM_ROOM_OAUTH_URL) && (response.getRawStatusCode() == 401
+            if (authenticationType == AuthenticationType.OAuth && !path.contains(ZOOM_ROOM_OAUTH_URL) && (response.getStatusCode().equals(HttpStatus.UNAUTHORIZED)
                     || System.currentTimeMillis() >= oauthTokenExpiresIn + oauthTokenGeneratedTimestamp || oauthTokenGeneratedTimestamp == 0L)) {
                 try {
                     authenticate();
@@ -1339,7 +1340,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             // if we got here, all 10 attempts failed, or this is a login error that doesn't imply retry attempts
             if (lastError instanceof CommandFailureException) {
                 int code = ((CommandFailureException)lastError).getStatusCode();
-                if (code == 401 || code == 403) {
+                if (code == HttpStatus.UNAUTHORIZED.value() || code == HttpStatus.FORBIDDEN.value()) {
                     String errorMessage = String.format("Unauthorized to perform the request %s: %s", url, lastError.getLocalizedMessage());
                     throw new FailedLoginException(errorMessage);
                 }
