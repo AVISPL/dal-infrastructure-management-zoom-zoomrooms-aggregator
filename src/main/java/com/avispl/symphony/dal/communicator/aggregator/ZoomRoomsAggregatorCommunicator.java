@@ -591,6 +591,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param authenticationType new value of {@link #authenticationType}
      */
     public void setAuthenticationType(String authenticationType) {
+        if (authenticationType == null) {
+            this.authenticationType = AuthenticationType.JWT;
+        }
         this.authenticationType = AuthenticationType.valueOf(authenticationType);
     }
 
