@@ -10,6 +10,10 @@ package com.avispl.symphony.dal.communicator.aggregator.properties;
  * @since 1.0.0
  */
 public class PropertyNameConstants {
+    /** @since 1.0.1 */
+    public static final String METRICS_DATA_RETRIEVED_TIME = "Metrics#DataRetrievedTime";
+    /** @since 1.0.1 */
+    public static final String LIVE_MEETING_DATA_RETRIEVED_TIME = "LiveMeeting#DataRetrievedTime";
 
     public static final String ROOM_CONTROLS_MEETING_SETTINGS_GROUP = "RoomControlsMeetingSettings#";
     public static final String ROOM_CONTROLS_ALERT_SETTINGS_GROUP = "RoomControlsAlertSettings#";
@@ -52,4 +56,8 @@ public class PropertyNameConstants {
     public static final String ROOM_STATUS_GROUP = "RoomStatus#";
     public static final String METRICS_ROOM_STATUS = "Metrics#RoomStatus";
     public static final String METRICS_ISSUES = "Metrics#Issues";
+
+    public static final String ROOMS_LIST_RETRIEVAL_ERROR_KEY = "ZoomRoomsListRetrievalError";
+    public static final String ROOMS_METRICS_RETRIEVAL_ERROR_KEY = "ZoomRoomsMetricsRetrievalError";
+    public static final String LOGIN_ERROR_KEY = "LoginError";
 }
