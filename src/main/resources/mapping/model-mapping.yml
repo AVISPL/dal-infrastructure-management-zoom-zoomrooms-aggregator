@@ -634,3 +634,11 @@ models:
           value: get("zoom_rooms").get("send_whiteboard_to_internal_contact_only")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
+  - model:
+      name: OAuthResponse
+      filter: get("access_token") != null
+      statistics:
+        AccessToken: get("access_token")?.asText()
+        TokenType: get("token_type")?.asText()
+        ExpiresIn: get("expires_in")?.asText()
+        Scope: get("scope")?.asText()
