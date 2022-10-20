@@ -218,39 +218,6 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     }
 
     @Test
-    public void controlRoomSettingOAuthTest() throws Exception {
-        mockAggregatorCommunicator.setAuthenticationType("OAuth");
-        mockAggregatorCommunicator.setAccountId("h8M_rmTuQsyDaZhp_xMyoQ");
-        mockAggregatorCommunicator.setLogin("rW1Kedu5QV2m24XI8h0SIQ");
-        mockAggregatorCommunicator.setPassword("***REMOVED***");
-        mockAggregatorCommunicator.setDisplayRoomSettings(true);
-        mockAggregatorCommunicator.init();
-        String roomId = "kjG6xV4jScasP0oDvBwSRA";
-        String property = "RoomControls#StartRoomPersonalMeeting";
-        ControllableProperty controllableProperty = new ControllableProperty();
-        controllableProperty.setProperty(property);
-        controllableProperty.setValue(1);
-        controllableProperty.setDeviceId(roomId);
-        List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(30000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-
-        AdvancedControllableProperty startControl = devices.stream().filter(aggregatedDevice ->
-                        aggregatedDevice.getDeviceId().equals(roomId)).findFirst().get()
-                .getControllableProperties().stream().filter(advancedControllableProperty ->
-                        advancedControllableProperty.getName().equals(property)).findFirst().get();
-
-        mockAggregatorCommunicator.controlProperty(controllableProperty);
-
-        AdvancedControllableProperty endControl = mockAggregatorCommunicator.retrieveMultipleStatistics().stream().filter(aggregatedDevice ->
-                        aggregatedDevice.getDeviceId().equals(roomId)).findFirst().get()
-                .getControllableProperties().stream().filter(advancedControllableProperty ->
-                        advancedControllableProperty.getName().equals(property)).findFirst().get();
-
-        Assert.assertFalse((Boolean.parseBoolean(String.valueOf(endControl.getValue()))));
-    }
-
-    @Test
     public void controlNumericRoomSettingTest() throws Exception {
         mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.retrieveMultipleStatistics();
