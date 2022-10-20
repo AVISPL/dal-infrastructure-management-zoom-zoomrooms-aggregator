@@ -2027,7 +2027,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @since 1.1.0
      * */
     private void generateAccessToken() throws Exception {
-        System.out.println("Generating access token...");
         if (StringUtils.isNullOrEmpty(accountId)) {
             String message = "Unable to log in using OAuth: no accountId provided";
             knownErrors.put(LOGIN_ERROR_KEY, message);
