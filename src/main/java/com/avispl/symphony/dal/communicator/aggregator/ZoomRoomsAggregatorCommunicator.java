@@ -22,6 +22,7 @@ import com.avispl.symphony.dal.communicator.aggregator.settings.ZoomRoomsSetting
 import com.avispl.symphony.dal.communicator.aggregator.status.RoomStatusProcessor;
 import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpRequest;
@@ -43,6 +44,7 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import static com.avispl.symphony.dal.communicator.aggregator.properties.PropertyNameConstants.*;
+import static com.avispl.symphony.dal.util.ControllablePropertyFactory.createButton;
 
 /**
  * Communicator retrieves information about all the ZoomRooms on a specific account.
@@ -54,6 +56,12 @@ import static com.avispl.symphony.dal.communicator.aggregator.properties.Propert
  */
 public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements Aggregator, Monitorable, Controller {
 
+    /**
+     *
+     * */
+    private interface PaginatedResponseProcessor {
+        void process(JsonNode response);
+    }
     /**
      * Process that is running constantly and triggers collecting data from Zoom API endpoints, based on the given timeouts and thresholds.
      *
@@ -214,7 +222,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String BASE_ZOOM_URL = "v2";
     private static final String ZOOM_ROOMS_URL = "rooms?page_size=%s";
-    private static final String ZOOM_DEVICES_URL = "rooms/%s/devices?page_size=%s"; // Requires room Id
+    private static final String ZOOM_DEVICES_URL = "rooms/%s/devices"; // Requires room Id
     private static final String ZOOM_ROOM_SETTINGS_URL = "/rooms/%s/settings"; // Requires room Id
     private static final String ZOOM_ROOM_ACCOUNT_SETTINGS_URL = "rooms/account_settings";
     private static final String ZOOM_ROOMS_METRICS_URL = "metrics/zoomrooms?page_size=%s";
@@ -413,9 +421,19 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private long roomDevicesRetrievalTimeout = 60 * 1000 / 2;
 
     /**
-     * Size of a room responses, in pages.
+     * Size of room responses, in pages.
      */
-    private int roomRequestPageSize = 5000;
+    private int roomRequestPageSize = 5;
+
+    /**
+     * Size of room responses, in pages.
+     */
+    private int locationRequestPageSize = 5;
+
+    /**
+     * Size of room metrics responses, in pages.
+     */
+    private int roomMetricsPageSize = 300;
 
     /**
      * The bottom rate limit for meeting details retrieval for rooms that have status InMeeting.
@@ -633,6 +651,42 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     public void setRoomRequestPageSize(int roomRequestPageSize) {
         this.roomRequestPageSize = roomRequestPageSize;
+    }
+
+    /**
+     * Retrieves {@link #roomMetricsPageSize}
+     *
+     * @return value of {@link #roomMetricsPageSize}
+     */
+    public int getRoomMetricsPageSize() {
+        return roomMetricsPageSize;
+    }
+
+    /**
+     * Sets {@link #roomMetricsPageSize} value
+     *
+     * @param roomMetricsPageSize new value of {@link #roomMetricsPageSize}
+     */
+    public void setRoomMetricsPageSize(int roomMetricsPageSize) {
+        this.roomMetricsPageSize = roomMetricsPageSize;
+    }
+
+    /**
+     * Retrieves {@link #locationRequestPageSize}
+     *
+     * @return value of {@link #locationRequestPageSize}
+     */
+    public int getLocationRequestPageSize() {
+        return locationRequestPageSize;
+    }
+
+    /**
+     * Sets {@link #locationRequestPageSize} value
+     *
+     * @param locationRequestPageSize new value of {@link #locationRequestPageSize}
+     */
+    public void setLocationRequestPageSize(int locationRequestPageSize) {
+        this.locationRequestPageSize = locationRequestPageSize;
     }
 
     /**
@@ -1169,16 +1223,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         List<String> supportedLocationIds = new ArrayList<>();
         boolean zoomRoomLocationsProvided = !StringUtils.isNullOrEmpty(zoomRoomLocations);
         if (zoomRoomLocationsProvided) {
-            JsonNode roomLocations = retrieveZoomRoomLocations();
-            if (roomLocations != null && roomLocations.isArray()) {
-                for (JsonNode roomLocation : roomLocations) {
-                    Map<String, String> location = new HashMap<>();
-                    aggregatedDeviceProcessor.applyProperties(location, roomLocation, "RoomLocation");
-                    if (zoomRoomLocations.contains(location.get(LOCATION_NAME))) {
-                        supportedLocationIds.add(location.get(LOCATION_ID));
+            processPaginatedResponse(ZOOM_ROOM_LOCATIONS_URL, locationRequestPageSize, (roomLocations) -> {
+                if (!roomLocations.isNull() && roomLocations.has("locations")) {
+                    roomLocations = roomLocations.get("locations");
+
+                    if (roomLocations != null && roomLocations.isArray()) {
+                        for (JsonNode roomLocation : roomLocations) {
+                            Map<String, String> location = new HashMap<>();
+                            aggregatedDeviceProcessor.applyProperties(location, roomLocation, "RoomLocation");
+                            if (zoomRoomLocations.contains(location.get(LOCATION_NAME))) {
+                                supportedLocationIds.add(location.get(LOCATION_ID));
+                            }
+                        }
                     }
                 }
-            }
+            });
 
             if (logger.isDebugEnabled()) {
                 logger.debug("Updated fetched locations. Supported locationIds: " + supportedLocationIds);
@@ -1196,15 +1255,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             if (!supportedLocationIds.isEmpty()) {
                 supportedLocationIds.forEach(locationId -> {
                     try {
-
-                        zoomRooms.addAll(aggregatedDeviceProcessor.extractDevices(retrieveZoomRooms(locationId)));
+                        processPaginatedZoomRoomsRetrieval(locationId, zoomRooms);
                     } catch (Exception e) {
                         throw new RuntimeException("Unable to retrieve Zoom Room entries by given locationId: " + locationId, e);
                     }
                 });
             }
         } else {
-            zoomRooms.addAll(aggregatedDeviceProcessor.extractDevices(retrieveZoomRooms(null)));
+            processPaginatedZoomRoomsRetrieval(null, zoomRooms);
         }
 
         List<String> retrievedRoomIds = new ArrayList<>();
@@ -1257,30 +1315,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
-     * Instantiate Text controllable property
-     *
-     * @param name         name of the property
-     * @param label        default button label
-     * @param labelPressed button label when is pressed
-     * @param gracePeriod  period to pause monitoring statistics for
-     * @return instance of AdvancedControllableProperty with AdvancedControllableProperty.Button as type
-     */
-    private AdvancedControllableProperty createButton(String name, String label, String labelPressed, long gracePeriod) {
-        AdvancedControllableProperty.Button button = new AdvancedControllableProperty.Button();
-        button.setLabel(label);
-        button.setLabelPressed(labelPressed);
-        button.setGracePeriod(gracePeriod);
-
-        return new AdvancedControllableProperty(name, new Date(), button, "");
-    }
-
-    /**
      * Retrieve list of ZoomRooms available
      *
      * @return response JsonNode
      * @throws Exception if a communication error occurs
      */
-    private JsonNode retrieveZoomRooms(String locationId) throws Exception {
+    private Pair<JsonNode, String> retrieveZoomRooms(String locationId, String nextPageToken) throws Exception {
         StringBuilder queryString = new StringBuilder();
         if (!StringUtils.isNullOrEmpty(zoomRoomTypes)) {
             queryString.append("&type=").append(zoomRoomTypes);
@@ -1288,7 +1328,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (!StringUtils.isNullOrEmpty(locationId)) {
             queryString.append("&location_id=").append(locationId);
         }
-        return doGetWithRetry(String.format(ZOOM_ROOMS_URL, roomRequestPageSize) + queryString.toString());
+        if (!StringUtils.isNullOrEmpty(nextPageToken)) {
+            queryString.append("&next_page_token=").append(nextPageToken);
+        }
+        JsonNode response = doGetWithRetry(String.format(ZOOM_ROOMS_URL, roomRequestPageSize) + queryString);
+
+        if (response == null) {
+            return Pair.of(null, null);
+        }
+        return Pair.of(response, response.at("/next_page_token").asText());
     }
 
     /**
@@ -1355,6 +1403,50 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         return null;
     }
 
+    /**
+     * Retrieve zoom rooms with support of the ZoomRoom API pagination (next page token)
+     *
+     * @param locationId to filter rooms based on locations
+     * @param zoomRooms to save all retrieved rooms to
+     * @throws Exception if any communication error occurs
+     * */
+    private void processPaginatedZoomRoomsRetrieval(String locationId, List<AggregatedDevice> zoomRooms) throws Exception {
+        boolean hasNextPage = true;
+        String nextPageToken = null;
+        Pair<JsonNode, String> response;
+        while(hasNextPage) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(String.format("Receiving page with next_page_token: %s", nextPageToken));
+            }
+            response = retrieveZoomRooms(locationId, nextPageToken);
+            nextPageToken = response.getRight();
+            hasNextPage = StringUtils.isNotNullOrEmpty(nextPageToken);
+            zoomRooms.addAll(aggregatedDeviceProcessor.extractDevices(response.getLeft()));
+        }
+    }
+
+    private void processPaginatedResponse(String url, int pageSize, PaginatedResponseProcessor processor) throws Exception {
+        JsonNode roomLocations;
+        boolean hasNextPage = true;
+        String nextPageToken = null;
+        while(hasNextPage) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(String.format("Receiving page with next_page_token: %s", nextPageToken));
+            }
+            if (StringUtils.isNullOrEmpty(nextPageToken)) {
+                roomLocations = doGetWithRetry(String.format(url, pageSize));
+            } else {
+                roomLocations = doGetWithRetry(String.format(url + "&next_page_token=" + nextPageToken, pageSize));
+            }
+            if (roomLocations == null) {
+                hasNextPage = false;
+                continue;
+            }
+            nextPageToken = roomLocations.at("/next_page_token").asText();
+            hasNextPage = StringUtils.isNotNullOrEmpty(nextPageToken);
+            processor.process(roomLocations);
+        }
+    }
     /**
      * Populate ZoomRooms with properties: metrics, devices, controls etc.
      *
@@ -1711,17 +1803,19 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
         validMetricsDataRetrievalPeriodTimestamp = currentTimestamp + metricsRetrievalTimeout;
         try {
-            JsonNode roomsMetrics = doGet(String.format(ZOOM_ROOMS_METRICS_URL, roomRequestPageSize), JsonNode.class);
-            if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("zoom_rooms")) {
-                for (JsonNode metric : roomsMetrics.get("zoom_rooms")) {
-                    Map<String, String> metricsData = new HashMap<>();
-                    if (metric != null) {
-                        aggregatedDeviceProcessor.applyProperties(metricsData, metric, "ZoomRoomMetrics");
+            processPaginatedResponse(ZOOM_ROOMS_METRICS_URL, roomMetricsPageSize, (roomsMetrics) -> {
+                if (!roomsMetrics.isNull() && roomsMetrics.has("zoom_rooms")) {
+                    for (JsonNode metric : roomsMetrics.get("zoom_rooms")) {
+                        Map<String, String> metricsData = new HashMap<>();
+                        if (metric != null) {
+                            aggregatedDeviceProcessor.applyProperties(metricsData, metric, "ZoomRoomMetrics");
+                            zoomRoomsMetricsData.put(metric.at("/id").asText(), metricsData);
+                            metricsData.put(METRICS_DATA_RETRIEVED_TIME, dateFormat.format(new Date()));
+                        }
                     }
-                    metricsData.put(METRICS_DATA_RETRIEVED_TIME, dateFormat.format(new Date()));
-                    zoomRoomsMetricsData.put(metric.get("id").asText(), metricsData);
                 }
-            }
+            });
+
             if (logger.isDebugEnabled()) {
                 logger.debug("Updated ZoomRooms metrics entries: " + zoomRoomsMetricsData);
             }
