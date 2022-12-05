@@ -69,7 +69,6 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     public void getDevicesWithFilteringTestOAuth() throws Exception {
         mockAggregatorCommunicator.setLogin("rW1Kedu5QV2m24XI8h0SIQ");
         mockAggregatorCommunicator.setPassword("aj2Dlq9V2fVO8ur4Qqtgt6Q8QyAYNSUB");
-        mockAggregatorCommunicator.init();
 
         mockAggregatorCommunicator.setDisplayAccountSettings(true);
         mockAggregatorCommunicator.setDisplayLiveMeetingDetails(true);
@@ -77,40 +76,52 @@ public class ZoomRoomsAggregatorCommunicatorTest {
         mockAggregatorCommunicator.setAccountId("h8M_rmTuQsyDaZhp_xMyoQ");
         mockAggregatorCommunicator.setAuthenticationType("OAuth");
         mockAggregatorCommunicator.setZoomRoomTypes("ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly");
+        mockAggregatorCommunicator.setZoomRoomLocations("Chicago");
+
+        mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);
         List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         mockAggregatorCommunicator.getMultipleStatistics();
         Assert.assertFalse(devices.isEmpty());
-        Assert.assertEquals(22, devices.size());
+        Assert.assertEquals(3, devices.size());
         Assert.assertNotNull(devices.get(0).getSerialNumber());
 
+        mockAggregatorCommunicator.setZoomRoomLocations("");
         mockAggregatorCommunicator.setZoomRoomTypes(" DigitalSignageOnly");
+        mockAggregatorCommunicator.destroy();
+        mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(60000);
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Assert.assertTrue(devices.isEmpty());
 
         mockAggregatorCommunicator.setZoomRoomTypes("");
+        mockAggregatorCommunicator.destroy();
+        mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(60000);
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Assert.assertFalse(devices.isEmpty());
-        Assert.assertEquals(22, devices.size());
+        Assert.assertEquals(26, devices.size());
         Assert.assertNotNull(devices.get(0).getSerialNumber());
 
         mockAggregatorCommunicator.setZoomRoomLocations("SomeLocationThatNoneOfTheDevicesHave");
+        mockAggregatorCommunicator.destroy();
+        mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(60000);
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Assert.assertTrue(devices.isEmpty());
 
         mockAggregatorCommunicator.setZoomRoomLocations("");
+        mockAggregatorCommunicator.destroy();
+        mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(60000);
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Assert.assertFalse(devices.isEmpty());
-        Assert.assertEquals(22, devices.size());
+        Assert.assertEquals(26, devices.size());
         Assert.assertNotNull(devices.get(0).getSerialNumber());
     }
 
