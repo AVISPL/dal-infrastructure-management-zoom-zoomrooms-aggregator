@@ -1895,20 +1895,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
-     * Retrieve list of ZoomRooms locations
-     *
-     * @return response JsonNode
-     * @throws Exception if any error occurs
-     */
-    private JsonNode retrieveZoomRoomLocations() throws Exception {
-        JsonNode roomsMetrics = doGetWithRetry(String.format(ZOOM_ROOM_LOCATIONS_URL, roomRequestPageSize));
-        if (roomsMetrics != null && !roomsMetrics.isNull() && roomsMetrics.has("locations")) {
-            return roomsMetrics.get("locations");
-        }
-        return null;
-    }
-
-    /**
      * Retrieve room settings
      *
      * @param type of settings list to get
