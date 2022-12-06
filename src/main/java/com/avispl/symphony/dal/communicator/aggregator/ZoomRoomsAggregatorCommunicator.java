@@ -428,7 +428,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      * Size of room responses, in pages.
      */
-    private int locationRequestPageSize = 5;
+    private int locationRequestPageSize = 300;
 
     /**
      * Size of room metrics responses, in pages.
