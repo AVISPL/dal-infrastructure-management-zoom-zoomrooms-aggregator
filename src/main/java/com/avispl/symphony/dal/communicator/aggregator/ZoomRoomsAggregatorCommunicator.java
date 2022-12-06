@@ -1317,7 +1317,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      * Retrieve list of ZoomRooms available
      *
-     * @return response JsonNode
+     * @param locationId id if a location to filter rooms for. Null or empty if none should be applied
+     * @param nextPageToken token to reference the next page. Null or empty if shouldn't be applied
+     * @return response pair of JsonNode and next_page_token
      * @throws Exception if a communication error occurs
      */
     private Pair<JsonNode, String> retrieveZoomRooms(String locationId, String nextPageToken) throws Exception {
@@ -1432,6 +1434,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param url to fetch
      * @param pageSize to have consistent page size response
      * @param processor interface that grants correct page response processing
+     * @throws Exception if communication error occurs
      * */
     private void processPaginatedResponse(String url, int pageSize, PaginatedResponseProcessor processor) throws Exception {
         JsonNode roomLocations;
