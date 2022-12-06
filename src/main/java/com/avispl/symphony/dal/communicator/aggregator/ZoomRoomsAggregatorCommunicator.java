@@ -1425,6 +1425,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
     }
 
+    /**
+     * Process the response that implies possibility of having more than 1 page in total.
+     * Whenever there are more pages - next_page_token property is used for the next page reference
+     *
+     * @param url to fetch
+     * @param pageSize to have consistent page size response
+     * @param processor interface that grants correct page response processing
+     * */
     private void processPaginatedResponse(String url, int pageSize, PaginatedResponseProcessor processor) throws Exception {
         JsonNode roomLocations;
         boolean hasNextPage = true;
