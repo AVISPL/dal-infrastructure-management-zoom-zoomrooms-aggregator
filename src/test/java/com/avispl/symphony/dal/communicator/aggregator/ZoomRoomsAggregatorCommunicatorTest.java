@@ -18,7 +18,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     @BeforeEach
     public void init() throws Exception {
         mockAggregatorCommunicator = new ZoomRoomsAggregatorCommunicator();
-        mockAggregatorCommunicator.setPassword("***REMOVED***");
+        mockAggregatorCommunicator.setPassword("");
         mockAggregatorCommunicator.setHost("api.zoom.us");
         mockAggregatorCommunicator.setProtocol("https");
         mockAggregatorCommunicator.setPort(443);
