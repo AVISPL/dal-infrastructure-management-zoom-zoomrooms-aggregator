@@ -1465,9 +1465,16 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private void populateDeviceDetails(String roomId) throws Exception {
-        AggregatedDevice aggregatedZoomRoomDevice = aggregatedDevices.get(roomId);
+            System.out.println("Fetching room details for device " + roomId);
+        if (logger.isDebugEnabled()) {
+            logger.debug("Fetching room details for device " + roomId);
+        }
 
+        AggregatedDevice aggregatedZoomRoomDevice = aggregatedDevices.get(roomId);
         if (aggregatedZoomRoomDevice == null) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Unable to find cached room with id " + roomId);
+            }
             return;
         }
         // To restore properties that were here before, but to override the rest
@@ -1654,6 +1661,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 Map<String, String> roomDeviceProperties = new HashMap<>();
                 if (deviceNode != null) {
                     aggregatedDeviceProcessor.applyProperties(roomDeviceProperties, deviceNode, "RoomDevice");
+                    if (deviceNode.at("/status").asText().equalsIgnoreCase("online")) {
+                        aggregatedDevices.get(roomId).setDeviceOnline(true);
+                    } else {
+                        aggregatedDevices.get(roomId).setDeviceOnline(false);
+                    }
                 }
 
                 String deviceType = roomDeviceProperties.get(DEVICE_TYPE_PROPERTY);
