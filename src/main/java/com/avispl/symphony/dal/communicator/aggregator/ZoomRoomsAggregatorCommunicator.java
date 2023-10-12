@@ -1465,7 +1465,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private void populateDeviceDetails(String roomId) throws Exception {
-            System.out.println("Fetching room details for device " + roomId);
         if (logger.isDebugEnabled()) {
             logger.debug("Fetching room details for device " + roomId);
         }
