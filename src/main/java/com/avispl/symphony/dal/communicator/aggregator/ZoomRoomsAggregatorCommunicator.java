@@ -1227,7 +1227,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         updateValidRetrieveStatisticsTimestamp();
 
         aggregatedDevices.values().forEach(aggregatedDevice -> aggregatedDevice.setTimestamp(currentTimestamp));
-        logger.debug("Zoom Rooms Collected Devices: " + aggregatedDevices.values());
+        if (logger.isDebugEnabled()) {
+            logger.debug("Zoom Rooms Collected Devices: " + aggregatedDevices.values());
+        }
         return new ArrayList<>(aggregatedDevices.values());
     }
 
