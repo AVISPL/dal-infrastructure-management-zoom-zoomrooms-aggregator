@@ -60,4 +60,41 @@ public class PropertyNameConstants {
     public static final String ROOMS_LIST_RETRIEVAL_ERROR_KEY = "ZoomRoomsListRetrievalError";
     public static final String ROOMS_METRICS_RETRIEVAL_ERROR_KEY = "ZoomRoomsMetricsRetrievalError";
     public static final String LOGIN_ERROR_KEY = "LoginError";
+
+    /** @since 1.2.0 */
+    public static final String DEVICE_SYSTEM_KEY = "System";
+    /** @since 1.2.0 */
+    public static final String DEVICE_APP_VERSION_KEY = "AppVersion";
+    /** @since 1.2.0 */
+    public static final String DEVICE_FIRMWARE_KEY = "Firmware";
+    /** @since 1.2.0 */
+    public static final String DEVICE_IP_ADDRESS_KEY = "IPAddress";
+    /** @since 1.2.0 */
+    public static final String DEVICE_DEVICE_TYPE_KEY = "DeviceType";
+    /** @since 1.2.0 */
+    public static final String DEVICES_PATH = "/devices";
+    /** @since 1.2.0 */
+    public static final String ID_PATH = "/id";
+    /** @since 1.2.0 */
+    public static final String ROOM_NAME_PATH = "/room_name";
+    /** @since 1.2.0 */
+    public static final String HOSTNAME_PATH = "/device_hostname";
+    /** @since 1.2.0 */
+    public static final String SERIAL_NUMBER_PATH = "/serial_number";
+    /** @since 1.2.0 */
+    public static final String TYPE_PATH = "/device_type";
+    /** @since 1.2.0 */
+    public static final String MODEL_PATH = "/device_model";
+    /** @since 1.2.0 */
+    public static final String STATUS_PATH = "/status";
+    /** @since 1.2.0 */
+    public static final String MAC_ADDRESS_PATH = "/device_mac_addresses";
+    /** @since 1.2.0 */
+    public static final String SYSTEM_PATH = "/device_system";
+    /** @since 1.2.0 */
+    public static final String APP_VERSION_PATH = "/app_version";
+    /** @since 1.2.0 */
+    public static final String FIRMWARE_PATH = "/device_firmware";
+    /** @since 1.2.0 */
+    public static final String IP_ADDRESS_PATH = "/ip_address";
 }

@@ -145,7 +145,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         String deviceId = aggregatedDevice.getDeviceId();
                         try {
                             // We need to only work with rooms here
-                            if (!deviceId.startsWith("room_device")) {
+                            if (!deviceId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
                                 populateDeviceDetails(deviceId);
                             }
                             knownErrors.remove(deviceId);
@@ -233,6 +233,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String ZOOM_ROOM_LOCATIONS_URL = "rooms/locations?page_size=%s";
     private static final String ZOOM_USER_DETAILS_URL = "users/%s"; // Requires room user id
     private static final String ZOOM_ROOM_METRICS_DETAILS_URL = "metrics/zoomrooms/%s"; // Required room id
+    private static final String ZOOM_ROOM_DEVICES_URL = "rooms/%s/devices";
+
+    /**
+     * Room device id prefix, to separate room devices from rooms in {@link #aggregatedDevices} map
+     * @since 1.2.0
+     * */
+    private static final String ROOM_DEVICE_ID_PREFIX = "room_device:";
 
     /**
      * URL template for OAuth authentication
@@ -1200,7 +1207,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * {@inheritDoc}
      */
     @Override
-    public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
+    public List<AggregatedDevice> retrieveMultipleStatistics() {
         if (logger.isDebugEnabled()) {
             logger.debug(String.format("Adapter initialized: %s, executorService exists: %s, serviceRunning: %s", isInitialized(), executorService != null, serviceRunning));
         }
@@ -1220,6 +1227,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         updateValidRetrieveStatisticsTimestamp();
 
         aggregatedDevices.values().forEach(aggregatedDevice -> aggregatedDevice.setTimestamp(currentTimestamp));
+        logger.debug("Zoom Rooms Collected Devices: " + aggregatedDevices.values());
         return new ArrayList<>(aggregatedDevices.values());
     }
 
@@ -1260,6 +1268,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
     }
 
+    /**
+     * Retrieve Zoom Room devices and add them to an {@link #aggregatedDevices} list, with "room_device" prefix to the id
+     * @param retrievedRoomIds list of retrieved device ids to keep track of
+     * @throws Exception if any error occurs
+     * */
     private void fetchRooms(List<String> retrievedRoomIds) throws Exception {
         List<String> supportedLocationIds = new ArrayList<>();
         boolean zoomRoomLocationsProvided = !StringUtils.isNullOrEmpty(zoomRoomLocations);
@@ -1321,53 +1334,89 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
     }
 
-    private void fetchRoomDevices(List<String> retrievedRoomIds) throws Exception {
+    /**
+     * Retrieve Zoom Room devices and add them to an {@link #aggregatedDevices} list, with "room_device" prefix to the id
+     * @param retrievedIds list of retrieved device ids to keep track of */
+    private void fetchRoomDevices(List<String> retrievedIds) throws Exception {
         for(String roomId: aggregatedDevices.keySet()) {
-            if (roomId.startsWith("room_device")) {
-                return;
-            }
-            processPaginatedResponse(String.format("/rooms/%s/devices", roomId), roomRequestPageSize, roomDevice -> {
-                List<AggregatedDevice> roomDevices = new ArrayList<>();
-                ArrayNode devices = (ArrayNode) roomDevice.at("/devices");
-                if (!devices.isMissingNode() && !devices.isEmpty()) {
-                    devices.forEach(jsonNode -> {
-                        AggregatedDevice device = new AggregatedDevice();
-                        Map<String, String> deviceProperties = new HashMap<>();
+            List<AggregatedDevice> roomDevices = updateAndRetrieveRoomDevices(roomId);
 
-                        device.setDeviceName(jsonNode.at("/room_name").asText() + ": " + jsonNode.at("/device_hostname").asText());
-                        device.setDeviceId(jsonNode.at("/id").asText());
-                        device.setType(jsonNode.at("/device_type").asText());
-                        device.setSerialNumber(jsonNode.at("/serial_number").asText());
-                        device.setDeviceOnline(jsonNode.at("/status").asText().equals("Online"));
-                        device.setDeviceModel(jsonNode.at("/device_model").asText());
-
-                        List<String> macAddresses = new ArrayList<>();
-                        for(JsonNode macAddress: jsonNode.at("/device_mac_addresses")){
-                            macAddresses.add(macAddress.asText());
-                        }
-                        device.setMacAddresses(macAddresses);
-
-                        deviceProperties.put("System", jsonNode.at("/device_system").asText());
-                        deviceProperties.put("AppVersion", jsonNode.at("/app_version").asText());
-                        deviceProperties.put("Firmware", jsonNode.at("/device_firmware").asText());
-                        deviceProperties.put("IPAddress", jsonNode.at("/ip_address").asText());
-                        deviceProperties.put("DeviceType", jsonNode.at("/device_type").asText());
-                        device.setProperties(deviceProperties);
-                        roomDevices.add(device);
-                    });
+            roomDevices.forEach(aggregatedDevice -> {
+                String deviceId = ROOM_DEVICE_ID_PREFIX + aggregatedDevice.getDeviceId();
+                retrievedIds.add(deviceId);
+                if (aggregatedDevices.containsKey(deviceId)) {
+                    aggregatedDevices.get(deviceId).setDeviceOnline(aggregatedDevice.getDeviceOnline());
+                } else {
+                    aggregatedDevices.put(deviceId, aggregatedDevice);
                 }
-
-                roomDevices.forEach(aggregatedDevice -> {
-                    String deviceId = "room_device:" + aggregatedDevice.getDeviceId();
-                    retrievedRoomIds.add(deviceId);
-                    if (aggregatedDevices.containsKey(deviceId)) {
-                        aggregatedDevices.get(deviceId).setDeviceOnline(aggregatedDevice.getDeviceOnline());
-                    } else {
-                        aggregatedDevices.put(deviceId, aggregatedDevice);
-                    }
-                });
             });
-        };
+        }
+    }
+
+    private List<AggregatedDevice> updateAndRetrieveRoomDevices(String roomId) throws Exception {
+        List<AggregatedDevice> roomDevices = new ArrayList<>();
+        if (roomId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
+            return roomDevices;
+        }
+        processPaginatedResponse(String.format(ZOOM_ROOM_DEVICES_URL, roomId), roomRequestPageSize, roomDevice -> {
+            ArrayNode devices = (ArrayNode) roomDevice.at(DEVICES_PATH);
+            if (!devices.isMissingNode() && !devices.isEmpty()) {
+                devices.forEach(jsonNode -> {
+                    AggregatedDevice device = new AggregatedDevice();
+                    Map<String, String> deviceProperties = new HashMap<>();
+
+                    String deviceId = jsonNode.at(ID_PATH).asText();
+                    if (StringUtils.isNullOrEmpty(deviceId)){
+                        return;
+                    }
+                    device.setDeviceId(deviceId);
+                    device.setDeviceName(String.format("%s: %s", jsonNode.at(ROOM_NAME_PATH).asText(), jsonNode.at(HOSTNAME_PATH).asText()));
+
+                    String serialNumber = jsonNode.at(SERIAL_NUMBER_PATH).asText();
+                    device.setSerialNumber(serialNumber);
+                    String deviceCategory = jsonNode.at(TYPE_PATH).asText();
+                    device.setCategory(deviceCategory);
+                    String deviceModel = jsonNode.at(MODEL_PATH).asText();
+                    device.setDeviceModel(deviceModel);
+
+                    device.setDeviceOnline(jsonNode.at(STATUS_PATH).asText().equals("Online"));
+                    List<String> macAddresses = new ArrayList<>();
+                    for(JsonNode macAddress: jsonNode.at(MAC_ADDRESS_PATH)){
+                        macAddresses.add(validateAndFormatMACAddress(macAddress.asText()));
+                    }
+                    device.setMacAddresses(macAddresses);
+
+                    deviceProperties.put(DEVICE_SYSTEM_KEY, jsonNode.at(SYSTEM_PATH).asText());
+                    deviceProperties.put(DEVICE_APP_VERSION_KEY, jsonNode.at(APP_VERSION_PATH).asText());
+                    deviceProperties.put(DEVICE_FIRMWARE_KEY, jsonNode.at(FIRMWARE_PATH).asText());
+                    deviceProperties.put(DEVICE_IP_ADDRESS_KEY, jsonNode.at(IP_ADDRESS_PATH).asText());
+                    deviceProperties.put(DEVICE_DEVICE_TYPE_KEY, jsonNode.at(TYPE_PATH).asText());
+                    deviceProperties.put("UpdateTime", String.valueOf(new Date()));
+                    device.setProperties(deviceProperties);
+                    roomDevices.add(device);
+                });
+            }
+        });
+        return roomDevices;
+    }
+
+    /**
+     * Format mac addresses of different formats to match a single pattern 00:00:00:00:00:00
+     *
+     * @param macAddress original macAddress
+     * @return formatted mac address
+     * */
+    private String validateAndFormatMACAddress(String macAddress) {
+        macAddress = macAddress.replaceAll("[^a-zA-Z0-9]", "");
+        StringBuilder res = new StringBuilder();
+        for (int i = 0; i < 6; i++) {
+            if (i != 5) {
+                res.append(macAddress, i * 2, (i + 1) * 2).append(":");
+            } else {
+                res.append(macAddress.substring(i * 2));
+            }
+        }
+        return res.toString();
     }
 
     /**
@@ -1545,7 +1594,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private void populateDeviceDetails(String roomId) throws Exception {
-            System.out.println("Fetching room details for device " + roomId);
         if (logger.isDebugEnabled()) {
             logger.debug("Fetching room details for device " + roomId);
         }
@@ -1580,6 +1628,18 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         } else {
             // if the device is not in the meeting
             cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
+        }
+
+        if (includeRoomDevices) {
+            List<AggregatedDevice> roomDevices = updateAndRetrieveRoomDevices(roomId);
+            roomDevices.forEach(aggregatedDevice -> {
+                String deviceId = ROOM_DEVICE_ID_PREFIX + aggregatedDevice.getDeviceId();
+                if (aggregatedDevices.containsKey(deviceId)) {
+                    aggregatedDevices.get(deviceId).setDeviceOnline(aggregatedDevice.getDeviceOnline());
+                } else {
+                    aggregatedDevices.put(deviceId, aggregatedDevice);
+                }
+            });
         }
 
         populateRoomUserDetails(aggregatedZoomRoomDevice.getSerialNumber(), properties);
