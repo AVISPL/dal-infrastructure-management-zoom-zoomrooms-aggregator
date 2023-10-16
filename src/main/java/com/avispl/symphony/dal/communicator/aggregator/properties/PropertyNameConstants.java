@@ -97,4 +97,6 @@ public class PropertyNameConstants {
     public static final String FIRMWARE_PATH = "/device_firmware";
     /** @since 1.2.0 */
     public static final String IP_ADDRESS_PATH = "/ip_address";
+    /** @since 1.2.0 */
+    public static final String ROOM_DEVICE_NAME_PATTERN = "%s: %s";
 }

@@ -1370,15 +1370,19 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         return;
                     }
                     device.setDeviceId(deviceId);
-                    device.setDeviceName(String.format("%s: %s", jsonNode.at(ROOM_NAME_PATH).asText(), jsonNode.at(HOSTNAME_PATH).asText()));
 
                     String serialNumber = jsonNode.at(SERIAL_NUMBER_PATH).asText();
-                    device.setSerialNumber(serialNumber);
-                    String deviceCategory = jsonNode.at(TYPE_PATH).asText();
-                    device.setCategory(deviceCategory);
-                    String deviceModel = jsonNode.at(MODEL_PATH).asText();
-                    device.setDeviceModel(deviceModel);
+                    String deviceHostname = jsonNode.at(HOSTNAME_PATH).asText();
+                    String roomName = jsonNode.at(ROOM_NAME_PATH).asText();
+                    if (StringUtils.isNotNullOrEmpty(deviceHostname)) {
+                        device.setDeviceName(String.format(ROOM_DEVICE_NAME_PATTERN, roomName, deviceHostname));
+                    } else {
+                        device.setDeviceName(String.format(ROOM_DEVICE_NAME_PATTERN, roomName, serialNumber));
+                    }
 
+                    device.setSerialNumber(serialNumber);
+                    device.setCategory(jsonNode.at(TYPE_PATH).asText());
+                    device.setDeviceModel(jsonNode.at(MODEL_PATH).asText());
                     device.setDeviceOnline(jsonNode.at(STATUS_PATH).asText().equals("Online"));
                     List<String> macAddresses = new ArrayList<>();
                     for(JsonNode macAddress: jsonNode.at(MAC_ADDRESS_PATH)){
