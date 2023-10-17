@@ -22,6 +22,7 @@ import com.avispl.symphony.dal.communicator.aggregator.settings.ZoomRoomsSetting
 import com.avispl.symphony.dal.communicator.aggregator.status.RoomStatusProcessor;
 import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -143,7 +144,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     devicesExecutionPool.add(executorService.submit(() -> {
                         String deviceId = aggregatedDevice.getDeviceId();
                         try {
-                            populateDeviceDetails(deviceId);
+                            // We need to only work with rooms here
+                            if (!deviceId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
+                                populateDeviceDetails(deviceId);
+                            }
                             knownErrors.remove(deviceId);
                         } catch (Exception e) {
                             knownErrors.put(deviceId, limitErrorMessageByLength(e.getMessage(), maxErrorLength));
@@ -229,6 +233,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String ZOOM_ROOM_LOCATIONS_URL = "rooms/locations?page_size=%s";
     private static final String ZOOM_USER_DETAILS_URL = "users/%s"; // Requires room user id
     private static final String ZOOM_ROOM_METRICS_DETAILS_URL = "metrics/zoomrooms/%s"; // Required room id
+    private static final String ZOOM_ROOM_DEVICES_URL = "rooms/%s/devices";
+
+    /**
+     * Room device id prefix, to separate room devices from rooms in {@link #aggregatedDevices} map
+     * @since 1.2.0
+     * */
+    private static final String ROOM_DEVICE_ID_PREFIX = "room_device:";
 
     /**
      * URL template for OAuth authentication
@@ -306,6 +317,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Zoom Room types specified for filtering
      */
     private String zoomRoomTypes; // ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly
+
+    private boolean includeRoomDevices = false;
 
     /**
      * Authentication type to use. Default value is JWT
@@ -539,6 +552,24 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Pool for keeping all the async operations in, to track any operations in progress and cancel them if needed
      */
     private List<Future> devicesExecutionPool = new ArrayList<>();
+
+    /**
+     * Retrieves {@link #includeRoomDevices}
+     *
+     * @return value of {@link #includeRoomDevices}
+     */
+    public boolean isIncludeRoomDevices() {
+        return includeRoomDevices;
+    }
+
+    /**
+     * Sets {@link #includeRoomDevices} value
+     *
+     * @param includeRoomDevices new value of {@link #includeRoomDevices}
+     */
+    public void setIncludeRoomDevices(boolean includeRoomDevices) {
+        this.includeRoomDevices = includeRoomDevices;
+    }
 
     /**
      * Retrieves {@link #maxErrorLength}
@@ -899,7 +930,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         aggregatedDeviceProcessor = new AggregatedDeviceProcessor(mapping);
         adapterProperties = new Properties();
         adapterProperties.load(getClass().getResourceAsStream("/version.properties"));
-
     }
 
     /**
@@ -1177,7 +1207,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * {@inheritDoc}
      */
     @Override
-    public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
+    public List<AggregatedDevice> retrieveMultipleStatistics() {
         if (logger.isDebugEnabled()) {
             logger.debug(String.format("Adapter initialized: %s, executorService exists: %s, serviceRunning: %s", isInitialized(), executorService != null, serviceRunning));
         }
@@ -1197,6 +1227,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         updateValidRetrieveStatisticsTimestamp();
 
         aggregatedDevices.values().forEach(aggregatedDevice -> aggregatedDevice.setTimestamp(currentTimestamp));
+        if (logger.isDebugEnabled()) {
+            logger.debug("Zoom Rooms Collected Devices: " + aggregatedDevices.values());
+        }
         return new ArrayList<>(aggregatedDevices.values());
     }
 
@@ -1220,6 +1253,29 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
         validDeviceMetaDataRetrievalPeriodTimestamp = currentTimestamp + deviceMetaDataRetrievalTimeout;
 
+        List<String> retrievedRoomIds = new ArrayList<>();
+        fetchRooms(retrievedRoomIds);
+        aggregatedDevices.keySet().removeIf(existingDevice -> !retrievedRoomIds.contains(existingDevice));
+
+        if (includeRoomDevices){
+            fetchRoomDevices(retrievedRoomIds);
+        }
+        // Remove rooms that were not populated by the API
+
+        if (retrievedRoomIds.isEmpty()) {
+            // If all the devices were not populated for any specific reason (no devices available, filtering, etc)
+            aggregatedDevices.clear();
+        }
+
+        nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
+    }
+
+    /**
+     * Retrieve Zoom Room devices and add them to an {@link #aggregatedDevices} list, with "room_device" prefix to the id
+     * @param retrievedRoomIds list of retrieved device ids to keep track of
+     * @throws Exception if any error occurs
+     * */
+    private void fetchRooms(List<String> retrievedRoomIds) throws Exception {
         List<String> supportedLocationIds = new ArrayList<>();
         boolean zoomRoomLocationsProvided = !StringUtils.isNullOrEmpty(zoomRoomLocations);
         if (zoomRoomLocationsProvided) {
@@ -1265,7 +1321,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             processPaginatedZoomRoomsRetrieval(null, zoomRooms);
         }
 
-        List<String> retrievedRoomIds = new ArrayList<>();
         zoomRooms.forEach(aggregatedDevice -> {
             String deviceId = aggregatedDevice.getDeviceId();
             retrievedRoomIds.add(deviceId);
@@ -1279,15 +1334,98 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (logger.isDebugEnabled()) {
             logger.debug("Updated ZoomRooms devices metadata: " + aggregatedDevices);
         }
-        // Remove rooms that were not populated by the API
-        aggregatedDevices.keySet().removeIf(existingDevice -> !retrievedRoomIds.contains(existingDevice));
+    }
 
-        if (zoomRooms.isEmpty()) {
-            // If all the devices were not populated for any specific reason (no devices available, filtering, etc)
-            aggregatedDevices.clear();
+    /**
+     * Retrieve Zoom Room devices and add them to an {@link #aggregatedDevices} list, with "room_device" prefix to the id
+     * @param retrievedIds list of retrieved device ids to keep track of */
+    private void fetchRoomDevices(List<String> retrievedIds) throws Exception {
+        for(String roomId: aggregatedDevices.keySet()) {
+            List<AggregatedDevice> roomDevices = updateAndRetrieveRoomDevices(roomId);
+
+            roomDevices.forEach(aggregatedDevice -> {
+                String deviceId = ROOM_DEVICE_ID_PREFIX + aggregatedDevice.getDeviceId();
+                retrievedIds.add(deviceId);
+                aggregatedDevices.put(deviceId, aggregatedDevice);
+            });
         }
+    }
 
-        nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
+    /**
+     * Retrieve information of cached room devices and update it
+     *
+     * @param roomId to update room devices for
+     * @return List of AggregatedDevice instances, containing device details
+     * @throws Exception if an error occurs during zoom API communication
+     * */
+    private List<AggregatedDevice> updateAndRetrieveRoomDevices(String roomId) throws Exception {
+        List<AggregatedDevice> roomDevices = new ArrayList<>();
+        if (roomId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
+            return roomDevices;
+        }
+        processPaginatedResponse(String.format(ZOOM_ROOM_DEVICES_URL, roomId), roomRequestPageSize, roomDevice -> {
+            ArrayNode devices = (ArrayNode) roomDevice.at(DEVICES_PATH);
+            if (!devices.isMissingNode() && !devices.isEmpty()) {
+                devices.forEach(jsonNode -> {
+                    AggregatedDevice device = new AggregatedDevice();
+                    Map<String, String> deviceProperties = new HashMap<>();
+
+                    String deviceId = jsonNode.at(ID_PATH).asText();
+                    if (StringUtils.isNullOrEmpty(deviceId)){
+                        return;
+                    }
+                    device.setDeviceId(deviceId);
+
+                    String serialNumber = jsonNode.at(SERIAL_NUMBER_PATH).asText();
+                    String deviceHostname = jsonNode.at(HOSTNAME_PATH).asText();
+                    String roomName = jsonNode.at(ROOM_NAME_PATH).asText();
+                    if (StringUtils.isNotNullOrEmpty(deviceHostname)) {
+                        device.setDeviceName(String.format(ROOM_DEVICE_NAME_PATTERN, roomName, deviceHostname));
+                    } else {
+                        device.setDeviceName(String.format(ROOM_DEVICE_NAME_PATTERN, roomName, serialNumber));
+                    }
+
+                    device.setSerialNumber(serialNumber);
+                    device.setCategory(jsonNode.at(TYPE_PATH).asText());
+                    device.setDeviceModel(jsonNode.at(MODEL_PATH).asText());
+                    device.setDeviceOnline(jsonNode.at(STATUS_PATH).asText().equals("Online"));
+                    List<String> macAddresses = new ArrayList<>();
+                    for(JsonNode macAddress: jsonNode.at(MAC_ADDRESS_PATH)){
+                        macAddresses.add(validateAndFormatMACAddress(macAddress.asText()));
+                    }
+                    device.setMacAddresses(macAddresses);
+
+                    deviceProperties.put(DEVICE_SYSTEM_KEY, jsonNode.at(SYSTEM_PATH).asText());
+                    deviceProperties.put(DEVICE_APP_VERSION_KEY, jsonNode.at(APP_VERSION_PATH).asText());
+                    deviceProperties.put(DEVICE_FIRMWARE_KEY, jsonNode.at(FIRMWARE_PATH).asText());
+                    deviceProperties.put(DEVICE_IP_ADDRESS_KEY, jsonNode.at(IP_ADDRESS_PATH).asText());
+                    deviceProperties.put(DEVICE_DEVICE_TYPE_KEY, jsonNode.at(TYPE_PATH).asText());
+                    deviceProperties.put("UpdateTime", String.valueOf(new Date()));
+                    device.setProperties(deviceProperties);
+                    roomDevices.add(device);
+                });
+            }
+        });
+        return roomDevices;
+    }
+
+    /**
+     * Format mac addresses of different formats to match a single pattern 00:00:00:00:00:00
+     *
+     * @param macAddress original macAddress
+     * @return formatted mac address
+     * */
+    private String validateAndFormatMACAddress(String macAddress) {
+        macAddress = macAddress.replaceAll("[^a-zA-Z0-9]", "");
+        StringBuilder res = new StringBuilder();
+        for (int i = 0; i < 6; i++) {
+            if (i != 5) {
+                res.append(macAddress, i * 2, (i + 1) * 2).append(":");
+            } else {
+                res.append(macAddress.substring(i * 2));
+            }
+        }
+        return res.toString();
     }
 
     /**
@@ -1499,6 +1637,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         } else {
             // if the device is not in the meeting
             cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
+        }
+
+        if (includeRoomDevices) {
+            List<AggregatedDevice> roomDevices = updateAndRetrieveRoomDevices(roomId);
+            roomDevices.forEach(aggregatedDevice -> {
+                String deviceId = ROOM_DEVICE_ID_PREFIX + aggregatedDevice.getDeviceId();
+                aggregatedDevices.put(deviceId, aggregatedDevice);
+            });
         }
 
         populateRoomUserDetails(aggregatedZoomRoomDevice.getSerialNumber(), properties);
