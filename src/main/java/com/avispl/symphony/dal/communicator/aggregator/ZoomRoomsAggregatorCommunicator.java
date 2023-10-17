@@ -1346,15 +1346,18 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             roomDevices.forEach(aggregatedDevice -> {
                 String deviceId = ROOM_DEVICE_ID_PREFIX + aggregatedDevice.getDeviceId();
                 retrievedIds.add(deviceId);
-                if (aggregatedDevices.containsKey(deviceId)) {
-                    aggregatedDevices.get(deviceId).setDeviceOnline(aggregatedDevice.getDeviceOnline());
-                } else {
-                    aggregatedDevices.put(deviceId, aggregatedDevice);
-                }
+                aggregatedDevices.put(deviceId, aggregatedDevice);
             });
         }
     }
 
+    /**
+     * Retrieve information of cached room devices and update it
+     *
+     * @param roomId to update room devices for
+     * @return List of AggregatedDevice instances, containing device details
+     * @throws Exception if an error occurs during zoom API communication
+     * */
     private List<AggregatedDevice> updateAndRetrieveRoomDevices(String roomId) throws Exception {
         List<AggregatedDevice> roomDevices = new ArrayList<>();
         if (roomId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
@@ -1640,11 +1643,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             List<AggregatedDevice> roomDevices = updateAndRetrieveRoomDevices(roomId);
             roomDevices.forEach(aggregatedDevice -> {
                 String deviceId = ROOM_DEVICE_ID_PREFIX + aggregatedDevice.getDeviceId();
-                if (aggregatedDevices.containsKey(deviceId)) {
-                    aggregatedDevices.get(deviceId).setDeviceOnline(aggregatedDevice.getDeviceOnline());
-                } else {
-                    aggregatedDevices.put(deviceId, aggregatedDevice);
-                }
+                aggregatedDevices.put(deviceId, aggregatedDevice);
             });
         }
 
