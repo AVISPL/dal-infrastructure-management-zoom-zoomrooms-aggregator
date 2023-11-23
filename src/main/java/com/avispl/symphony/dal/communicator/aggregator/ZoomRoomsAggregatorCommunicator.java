@@ -73,11 +73,17 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         private volatile boolean inProgress;
 
         public ZoomRoomsDeviceDataLoader() {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Creating new device data loader.");
+            }
             inProgress = true;
         }
 
         @Override
         public void run() {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Entering device data loader active stage.");
+            }
             mainloop:
             while (inProgress) {
                 try {
@@ -87,18 +93,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 }
 
                 if (!inProgress) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Main data collection thread is not in progress, breaking.");
+                    }
                     break mainloop;
                 }
 
-                // next line will determine whether Zoom monitoring was paused
                 updateAggregatorStatus();
+                // next line will determine whether Zoom monitoring was paused
                 if (devicePaused) {
                     continue mainloop;
                 }
 
                 try {
                     if (logger.isDebugEnabled()) {
-                        logger.debug("Fetching devices list");
+                        logger.debug("Fetching devices list.");
                     }
                     fetchDevicesList();
                     knownErrors.remove(ROOMS_LIST_RETRIEVAL_ERROR_KEY);
@@ -111,11 +120,17 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 }
 
                 if (!inProgress) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("The data collection thread is not in progress. Breaking the loop.");
+                    }
                     break mainloop;
                 }
 
                 int aggregatedDevicesCount = aggregatedDevices.size();
                 if (aggregatedDevicesCount == 0) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("No devices collected in the main data collection thread so far. Continuing.");
+                    }
                     continue mainloop;
                 }
 
@@ -139,6 +154,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
                 for (AggregatedDevice aggregatedDevice : aggregatedDevices.values()) {
                     if (!inProgress) {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("The data collection thread is not in progress. Breaking the data update loop.");
+                        }
                         break;
                     }
                     devicesExecutionPool.add(executorService.submit(() -> {
@@ -183,7 +201,19 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
          * Triggers main loop to stop
          */
         public void stop() {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Main device details collection loop is stopped!");
+            }
             inProgress = false;
+        }
+
+        /**
+         * Retrieves {@link #inProgress}
+         *
+         * @return value of {@link #inProgress}
+         */
+        public boolean isInProgress() {
+            return inProgress;
         }
     }
 
@@ -1096,6 +1126,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (logger.isDebugEnabled()) {
             logger.debug("Internal init is called.");
         }
+
         adapterInitializationTimestamp = System.currentTimeMillis();
         setBaseUri(BASE_ZOOM_URL);
         jwtToken = getPassword();
@@ -1103,6 +1134,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
 
         executorService = Executors.newFixedThreadPool(8);
+        if (logger.isDebugEnabled()) {
+            logger.debug("Submitting new device data loader.");
+        }
         executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
 
         long currentTimestamp = System.currentTimeMillis();
@@ -1211,6 +1245,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (logger.isDebugEnabled()) {
             logger.debug(String.format("Adapter initialized: %s, executorService exists: %s, serviceRunning: %s", isInitialized(), executorService != null, serviceRunning));
         }
+        if (!deviceDataLoader.isInProgress()) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Device data loader is not in progress, devices data is not updated.");
+            }
+        }
+        updateValidRetrieveStatisticsTimestamp();
         if (executorService == null) {
             // Due to the bug that after changing properties on fly - the adapter is destroyed but adapter is not initialized properly,
             // so executor service is not running. We need to make sure executorService exists
@@ -1224,7 +1264,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
         long currentTimestamp = System.currentTimeMillis();
         nextDevicesCollectionIterationTimestamp = currentTimestamp;
-        updateValidRetrieveStatisticsTimestamp();
 
         aggregatedDevices.values().forEach(aggregatedDevice -> aggregatedDevice.setTimestamp(currentTimestamp));
         if (logger.isDebugEnabled()) {
@@ -2132,7 +2171,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * calls during {@link ZoomRoomsAggregatorCommunicator#validRetrieveStatisticsTimestamp}
      */
     private synchronized void updateAggregatorStatus() {
+        // If the adapter is destroyed out of order, we need to make sure the device isn't paused here
+        if (validRetrieveStatisticsTimestamp == 0L) {
+            return;
+        }
         devicePaused = validRetrieveStatisticsTimestamp < System.currentTimeMillis();
+        if (logger.isDebugEnabled()) {
+            logger.debug("Data collector paused status update: " + devicePaused + " " + validRetrieveStatisticsTimestamp);
+        }
     }
 
     private synchronized void updateValidRetrieveStatisticsTimestamp() {
