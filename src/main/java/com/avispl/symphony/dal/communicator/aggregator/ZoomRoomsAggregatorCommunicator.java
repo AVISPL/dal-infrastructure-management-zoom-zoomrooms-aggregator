@@ -98,7 +98,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     updateAggregatorStatus();
                     // next line will determine whether Zoom monitoring was paused
                     if (devicePaused) {
-                        logDebugMessage("The device is paused, data collector is not active.");
+                        logDebugMessage("The device communicator is paused, data collector is not active.");
                         continue mainloop;
                     }
                     try {
@@ -186,7 +186,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     logger.error("Unexpected error occurred during main device collection cycle", e);
                 }
             }
-            logDebugMessage("Main device collection loop is completed");
+            logDebugMessage("Main device collection loop is completed, in progress marker: " + inProgress);
             // Finished collecting
         }
 
@@ -430,7 +430,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * called during this period of time - device is considered to be paused, thus the Cloud API
      * is not supposed to be called
      */
-    private static final long retrieveStatisticsTimeOut = 3 * 60 * 1000;
+    private static final long retrieveStatisticsTimeOut = 180000;
 
     /**
      * Device metadata retrieval timeout. The general devices list is retrieved once during this time period.
@@ -545,7 +545,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * is set to currentTime + 30s, at the same time, calling {@link #retrieveMultipleStatistics()} and updating the
      * {@link #aggregatedDevices} resets it to the currentTime timestamp, which will re-activate data collection.
      */
-    private static long nextDevicesCollectionIterationTimestamp;
+    private volatile long nextDevicesCollectionIterationTimestamp;
 
     /**
      * This parameter holds timestamp of when we need to stop performing API calls
@@ -565,7 +565,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Executor that runs all the async operations, that {@link #deviceDataLoader} is posting and
      * {@link #devicesExecutionPool} is keeping track of
      */
-    private static ExecutorService executorService;
+    private ExecutorService executorService;
 
     /**
      * Runner service responsible for collecting data and posting processes to {@link #devicesExecutionPool}
@@ -985,7 +985,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * {@inheritDoc}
      *
      * JWT authentication type does not need any specific method to authenticate since it's based on a static jwt.
-     * OAuth authentication has a separate process based on clientId/clientSecret and accountId.
+     * OAuth has a separate process based on clientId/clientSecret and accountId.
      */
     @Override
     protected void authenticate() throws Exception {
@@ -1136,6 +1136,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         long currentTimestamp = System.currentTimeMillis();
         validDeviceMetaDataRetrievalPeriodTimestamp = currentTimestamp;
         validMetricsDataRetrievalPeriodTimestamp = currentTimestamp;
+        validRetrieveStatisticsTimestamp = System.currentTimeMillis() + retrieveStatisticsTimeOut;
         serviceRunning = true;
         super.internalInit();
     }
@@ -2119,10 +2120,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     private synchronized void updateAggregatorStatus() {
         // If the adapter is destroyed out of order, we need to make sure the device isn't paused here
-        if (validRetrieveStatisticsTimestamp == 0L) {
-            return;
+        if (validRetrieveStatisticsTimestamp > 0L) {
+            devicePaused = validRetrieveStatisticsTimestamp < System.currentTimeMillis();
+        } else {
+            devicePaused = false;
         }
-        devicePaused = validRetrieveStatisticsTimestamp < System.currentTimeMillis();
     }
 
     private synchronized void updateValidRetrieveStatisticsTimestamp() {
@@ -2319,6 +2321,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @since 1.1.0
      */
     private String limitErrorMessageByLength(String originalMessage, int length) {
+        if (originalMessage == null) {
+            return "N/A";
+        }
         int messageLength = originalMessage.length();
         String resultMessage =  originalMessage.substring(0, Math.min(messageLength, length));
         if (messageLength > length) {
