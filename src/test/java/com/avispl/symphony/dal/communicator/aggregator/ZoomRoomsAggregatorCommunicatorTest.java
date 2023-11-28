@@ -68,7 +68,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     @Test
     public void getDevicesWithFilteringTestOAuth() throws Exception {
         mockAggregatorCommunicator.setLogin("rW1Kedu5QV2m24XI8h0SIQ");
-        mockAggregatorCommunicator.setPassword("***REMOVED***");
+        mockAggregatorCommunicator.setPassword("aj2Dlq9V2fVO8ur4Qqtgt6Q8QyAYNSUB");
 
         mockAggregatorCommunicator.setDisplayAccountSettings(true);
         mockAggregatorCommunicator.setDisplayLiveMeetingDetails(true);
