@@ -6,6 +6,7 @@ package com.avispl.symphony.dal.communicator.aggregator;
 import com.avispl.symphony.api.dal.control.Controller;
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
+import com.avispl.symphony.api.dal.dto.monitor.EndpointStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
 import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
@@ -24,10 +25,7 @@ import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.tuple.Pair;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpRequest;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.*;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
@@ -83,6 +81,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             logDebugMessage("Entering device data loader active stage.");
             mainloop:
             while (inProgress) {
+                long startCycle = System.currentTimeMillis();
                 try {
                     try {
                         TimeUnit.MILLISECONDS.sleep(500);
@@ -181,7 +180,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     // launches devices detailed statistics collection
                     nextDevicesCollectionIterationTimestamp = System.currentTimeMillis() + 30000;
 
-                    logDebugMessage("Finished collecting devices statistics cycle at " + new Date());
+                    lastMonitoringCycleDuration = (System.currentTimeMillis() - startCycle)/1000;
+                    logDebugMessage("Finished collecting devices statistics cycle at " + new Date() + ", total duration: " + lastMonitoringCycleDuration);
                 } catch(Exception e) {
                     logger.error("Unexpected error occurred during main device collection cycle", e);
                 }
@@ -339,9 +339,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private Properties adapterProperties;
 
     /**
+     * How much time last monitoring cycle took to finish
+     * */
+    private Long lastMonitoringCycleDuration;
+
+    /**
      * Locations specified for filtering
      */
     private String zoomRoomLocations;
+
+    /**
+     * Property groups to exclude.
+     * RoomUserDetails | RoomControlSettings | RoomDevices
+     *
+     * */
+    private List<String> excludePropertyGroups = new ArrayList<>();
 
     /**
      * Zoom Room types specified for filtering
@@ -486,6 +498,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private int liveMeetingDetailsDailyRequestRateThreshold = 5000;
 
     /**
+     * Number of threads assigned for the data collection jobs
+     * */
+    private int executorServiceThreadCount = 8;
+    /**
      * Whether or not to show the LiveMeeting details for the rooms that have status InMeeting
      */
     private boolean displayLiveMeetingDetails = false;
@@ -582,6 +598,46 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Pool for keeping all the async operations in, to track any operations in progress and cancel them if needed
      */
     private List<Future> devicesExecutionPool = new ArrayList<>();
+
+    /**
+     * Retrieves {@link #executorServiceThreadCount}
+     *
+     * @return value of {@link #executorServiceThreadCount}
+     */
+    public int getExecutorServiceThreadCount() {
+        return executorServiceThreadCount;
+    }
+
+    /**
+     * Sets {@link #executorServiceThreadCount} value
+     *
+     * @param executorServiceThreadCount new value of {@link #executorServiceThreadCount}
+     */
+    public void setExecutorServiceThreadCount(int executorServiceThreadCount) {
+        if (executorServiceThreadCount == 0) {
+            this.executorServiceThreadCount = 8;
+        } else {
+            this.executorServiceThreadCount = executorServiceThreadCount;
+        }
+    }
+
+    /**
+     * Retrieves {@link #excludePropertyGroups}
+     *
+     * @return value of {@link #excludePropertyGroups}
+     */
+    public String getExcludePropertyGroups() {
+        return String.join(",", excludePropertyGroups);
+    }
+
+    /**
+     * Sets {@link #excludePropertyGroups} value
+     *
+     * @param excludePropertyGroups new value of {@link #excludePropertyGroups}
+     */
+    public void setExcludePropertyGroups(String excludePropertyGroups) {
+        this.excludePropertyGroups = Arrays.stream(excludePropertyGroups.split(",")).map(String::trim).collect(Collectors.toList());
+    }
 
     /**
      * Retrieves {@link #includeRoomDevices}
@@ -961,7 +1017,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         adapterProperties = new Properties();
         adapterProperties.load(getClass().getResourceAsStream("/version.properties"));
 
-        executorService = Executors.newFixedThreadPool(8);
+        executorService = Executors.newFixedThreadPool(executorServiceThreadCount);
         executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
     }
 
@@ -1084,6 +1140,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
         Map<String, String> statistics = new HashMap<>();
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
+        Map<String, String> dynamicStatistics = new HashMap<>();
 
         List<AdvancedControllableProperty> accountSettingsControls = new ArrayList<>();
         if (displayAccountSettings) {
@@ -1109,6 +1166,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         statistics.put("AdapterVersion", adapterProperties.getProperty("mock.aggregator.version"));
         statistics.put("AdapterBuildDate", adapterProperties.getProperty("mock.aggregator.build.date"));
         statistics.put("AdapterUptime", normalizeUptime((System.currentTimeMillis() - adapterInitializationTimestamp) / 1000));
+        if (lastMonitoringCycleDuration != null) {
+            dynamicStatistics.put("LastMonitoringCycleDuration(s)", String.valueOf(lastMonitoringCycleDuration));
+        }
+        dynamicStatistics.put("MonitoredDevicesTotal", String.valueOf(aggregatedDevices.size()));
 
         statistics.put("AuthenticationType", authenticationType.name());
         knownErrors.forEach((key, value) -> statistics.put("Errors#" + key, value));
@@ -1116,6 +1177,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             statistics.put("DashboardMetricsDailyRateLimitRemaining", String.valueOf(metricsRateLimitRemaining));
         }
 
+        extendedStatistics.setDynamicStatistics(dynamicStatistics);
         extendedStatistics.setStatistics(statistics);
         extendedStatistics.setControllableProperties(accountSettingsControls);
         return Collections.singletonList(extendedStatistics);
@@ -1561,6 +1623,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     return null;
                 }
                 transformAndSaveException(lastError);
+            } else if (lastError instanceof FailedLoginException) {
+                String errorMessage = String.format("Unauthorized to perform the request %s: %s", url, lastError.getLocalizedMessage());
+                transformAndSaveException(new FailedLoginException(errorMessage));
+                return null;
             } else {
                 transformAndSaveException(lastError);
             }
@@ -1582,6 +1648,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         while(hasNextPage) {
             logDebugMessage(String.format("Receiving page with next_page_token: %s", nextPageToken));
             response = retrieveZoomRooms(locationId, nextPageToken);
+            if (response.getLeft() == null) {
+                return;
+            }
             nextPageToken = response.getRight();
             hasNextPage = StringUtils.isNotNullOrEmpty(nextPageToken);
             zoomRooms.addAll(aggregatedDeviceProcessor.extractDevices(response.getLeft()));
@@ -1647,11 +1716,36 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             properties.remove(METRICS_ISSUES);
         }
 
+        List<Statistics> statistics = aggregatedZoomRoomDevice.getMonitoredStatistics();
         if (properties.get(METRICS_ROOM_STATUS).equals("InMeeting")) {
             // if device is in the meeting - attempt to retrieve meeting details from the detailed metrics
+            if (statistics == null) {
+                statistics = new ArrayList<>();
+                aggregatedZoomRoomDevice.setMonitoredStatistics(statistics);
+            }
+            boolean deviceHasEndpointStatistics = false;
+            for (Statistics statsEntry: statistics) {
+                if (statsEntry instanceof EndpointStatistics) {
+                    deviceHasEndpointStatistics = true;
+                    ((EndpointStatistics) statsEntry).setInCall(true);
+                }
+            }
+            if (!deviceHasEndpointStatistics) {
+                EndpointStatistics endpointStatistics = new EndpointStatistics();
+                endpointStatistics.setInCall(true);
+                statistics.add(endpointStatistics);
+            }
+
             retrieveZoomRoomMetricsDetails(roomId, properties);
         } else {
             // if the device is not in the meeting
+            if (statistics != null) {
+                for (Statistics statsEntry : statistics) {
+                    if (statsEntry instanceof EndpointStatistics) {
+                        ((EndpointStatistics) statsEntry).setInCall(false);
+                    }
+                }
+            }
             cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
         }
 
@@ -1663,13 +1757,17 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             });
         }
 
-        populateRoomUserDetails(aggregatedZoomRoomDevice.getSerialNumber(), properties);
-
+        if (!excludePropertyGroups.contains("RoomUserDetails")) {
+            populateRoomUserDetails(aggregatedZoomRoomDevice.getSerialNumber(), properties);
+        }
         List<AdvancedControllableProperty> controllableProperties = aggregatedZoomRoomDevice.getControllableProperties();
-
-        populateRoomSettings(roomId, properties, controllableProperties);
-        retrieveGroupedRoomDevicesInformation(roomId, properties);
-        createRoomControls(properties, controllableProperties);
+        if (!excludePropertyGroups.contains("RoomControlSettings")) {
+            populateRoomSettings(roomId, properties, controllableProperties);
+        }
+        if (!excludePropertyGroups.contains("RoomDevices")) {
+            retrieveGroupedRoomDevicesInformation(roomId, properties);
+            createRoomControls(properties, controllableProperties);
+        }
 
         aggregatedZoomRoomDevice.setProperties(properties);
         aggregatedZoomRoomDevice.setControllableProperties(controllableProperties);
