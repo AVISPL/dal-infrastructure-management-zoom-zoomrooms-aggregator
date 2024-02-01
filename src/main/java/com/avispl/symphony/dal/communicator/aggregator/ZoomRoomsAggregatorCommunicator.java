@@ -1374,7 +1374,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         aggregatedDevices.values().forEach(aggregatedDevice -> aggregatedDevice.setTimestamp(currentTimestamp));
         logDebugMessage("Zoom Rooms Collected Devices: " + aggregatedDevices.values());
 
-
         return new ArrayList<>(aggregatedDevices.values());
     }
 
@@ -1790,6 +1789,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             setRoomInCall(aggregatedZoomRoomDevice, true);
         } else {
             cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
+
             setRoomInCall(aggregatedZoomRoomDevice, false);
         }
 
