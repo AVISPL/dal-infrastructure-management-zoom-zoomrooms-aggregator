@@ -1410,14 +1410,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         });
 
         if (includeRoomDevices){
-            fetchRoomDevices();
+            fetchRoomDevices(retrievedRoomIds);
         }
         // Remove rooms that were not populated by the API
-
         if (retrievedRoomIds.isEmpty()) {
             // If all the devices were not populated for any specific reason (no devices available, filtering, etc)
             aggregatedDevices.clear();
         }
+        aggregatedDevices.keySet().removeIf(deviceId -> !retrievedRoomIds.contains(deviceId));
 
         nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
     }
@@ -1484,9 +1484,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * Retrieve Zoom Room devices and add them to an {@link #aggregatedDevices} list, with "room_device" prefix to the id */
-    private void fetchRoomDevices() throws Exception {
+    private void fetchRoomDevices(List<String> retrievedRoomIds) throws Exception {
         for(String roomId: aggregatedDevices.keySet()) {
-            updateAndRetrieveRoomDevices(roomId);
+            retrievedRoomIds.addAll(updateAndRetrieveRoomDevices(roomId));
         }
     }
 
@@ -1494,11 +1494,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Retrieve information of cached room devices and update it
      *
      * @param roomId to update room devices for
+     * @return list of collected deviceIds
      * @throws Exception if an error occurs during zoom API communication
      * */
-    private void updateAndRetrieveRoomDevices(String roomId) throws Exception {
+    private List<String> updateAndRetrieveRoomDevices(String roomId) throws Exception {
+        List<String> collectedDeviceIds = new ArrayList<>();
         if (roomId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
-            return;
+            return collectedDeviceIds;
         }
         processPaginatedResponse(String.format(ZOOM_ROOM_DEVICES_URL, roomId), roomRequestPageSize, roomDevice -> {
             ArrayNode devices = (ArrayNode) roomDevice.at(DEVICES_PATH);
@@ -1558,10 +1560,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                             }
                         }
                     }
+                    collectedDeviceIds.add(roomDeviceId);
                     aggregatedDevices.put(roomDeviceId, device);
                 });
             }
         });
+        return collectedDeviceIds;
     }
 
     /**
@@ -1662,6 +1666,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             try {
                 return doGet(url, JsonNode.class);
             } catch (CommandFailureException e) {
+                //TODO propagate 429 on top, so API Error is reported? (make optional)
                 lastError = e;
                 if (e.getStatusCode() != 429) {
                     // Might be 401, 403 or any other error code here so the code will just get stuck
