@@ -12,7 +12,7 @@ models:
         deviceName: get("name")
         deviceMake: "Other"
         deviceModel: "Unknown"
-        deviceOnline: get("status")?.asText().equals("Offline") != true
+        deviceOnline: get("status")?.asText()?.equals("Offline") != true
       properties:
         Metrics#RoomStatus: get("status")?.asText()?.replace(" ", "")
   - model:
