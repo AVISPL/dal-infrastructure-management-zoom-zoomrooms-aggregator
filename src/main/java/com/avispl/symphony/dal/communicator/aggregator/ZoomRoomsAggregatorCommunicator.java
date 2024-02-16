@@ -1402,7 +1402,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
         aggregatedDevices.values().forEach(aggregatedDevice -> {
             Map<String, String> properties = aggregatedDevice.getProperties();
-            if (properties.get(METRICS_ROOM_STATUS).equals("InMeeting")) {
+            if (properties.containsKey(METRICS_ROOM_STATUS) && properties.get(METRICS_ROOM_STATUS).equals("InMeeting")) {
                 setRoomInCall(aggregatedDevice, true);
             } else {
                 setRoomInCall(aggregatedDevice, false);
@@ -1790,7 +1790,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             properties.remove(METRICS_ISSUES);
         }
 
-        if (properties.get(METRICS_ROOM_STATUS).equals("InMeeting")) {
+        if (properties.containsKey(METRICS_ROOM_STATUS) && properties.get(METRICS_ROOM_STATUS).equals("InMeeting")) {
             retrieveZoomRoomMetricsDetails(roomId, properties);
             setRoomInCall(aggregatedZoomRoomDevice, true);
         } else {
