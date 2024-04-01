@@ -43,7 +43,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import static com.avispl.symphony.dal.communicator.aggregator.properties.PropertyNameConstants.*;
-import static com.avispl.symphony.dal.util.ControllablePropertyFactory.createButton;
 
 /**
  * Communicator retrieves information about all the ZoomRooms on a specific account.
@@ -1541,19 +1540,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
-     * Build rpc request for rpc operations (client reboot, leave or end current meeting)
-     *
-     * @param method to use for rpc request
-     * @return {@code Map<String, String>} request map
-     */
-    private Map<String, Object> buildRpcRequest(String method) {
-        Map<String, Object> command = new HashMap<>();
-        command.put("jsonrpc", "2.0");
-        command.put("method", method);
-        return command;
-    }
-
-    /**
      * Retrieve list of ZoomRooms available
      *
      * @param locationId id if a location to filter rooms for. Null or empty if none should be applied
@@ -1746,7 +1732,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         List<AdvancedControllableProperty> controllableProperties = aggregatedZoomRoomDevice.getControllableProperties();
         if (!excludePropertyGroups.contains("RoomDevices")) {
             retrieveGroupedRoomDevicesInformation(roomId, properties);
-            createRoomControls(properties, controllableProperties);
         }
         if (!excludePropertyGroups.contains("RoomControlSettings")) {
             populateRoomSettings(roomId, properties, controllableProperties);
@@ -1989,53 +1974,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
-     * Create a list of RoomControls based on room status and save them to properties
-     *
-     * @param properties             map to save statistics values to
-     * @param controllableProperties list to save controllable properties to
-     */
-    private void createRoomControls(Map<String, String> properties, List<AdvancedControllableProperty> controllableProperties) {
-        cleanupStaleProperties(properties, ROOM_CONTROLS_GROUP);
-        cleanupStaleControls(controllableProperties, ROOM_CONTROLS_GROUP);
-
-        logDebugMessage("RoomControls group is omitted: authenticationType is set to OAuth");
-        return;
-//        String roomStatus = properties.get(METRICS_ROOM_STATUS);
-//        if (!StringUtils.isNullOrEmpty(roomStatus)) {
-//            if ((roomStatus.equals("InMeeting") || roomStatus.equals("Connecting"))) {
-//                properties.put(END_CURRENT_MEETING_CONTROL, "");
-//                addOrUpdateDeviceControl(controllableProperties, createButton(END_CURRENT_MEETING_CONTROL, "End", "Ending...", 0L));
-//
-//                properties.put(LEAVE_CURRENT_MEETING_CONTROL, "");
-//                addOrUpdateDeviceControl(controllableProperties, createButton(LEAVE_CURRENT_MEETING_CONTROL, "Leave", "Leaving...", 0L));
-//
-//                properties.remove(START_ROOM_PMI_CONTROL);
-//            } else if (!roomStatus.equals("Offline")) {
-//                properties.put(START_ROOM_PMI_CONTROL, "");
-//                properties.put(RESTART_ZOOM_ROOMS_CLIENT_CONTROL, "");
-//
-//                addOrUpdateDeviceControl(controllableProperties, createButton(RESTART_ZOOM_ROOMS_CLIENT_CONTROL, "Restart", "Restarting...", 0L));
-//                addOrUpdateDeviceControl(controllableProperties, createButton(START_ROOM_PMI_CONTROL, "Start", "Starting...", 0L));
-//
-//                properties.remove(END_CURRENT_MEETING_CONTROL);
-//                properties.remove(LEAVE_CURRENT_MEETING_CONTROL);
-//            }
-//        }
-    }
-
-    /**
-     * Add device control to controls list, but make sure it's not duplicated.
-     * Properties are searched by name, if there's any match - existing property is removed and replaced with the newer one
-     *
-     * @param controllableProperties full list of properties
-     * @param controllableProperty property to add
-     * */
-    private void addOrUpdateDeviceControl(List<AdvancedControllableProperty> controllableProperties, AdvancedControllableProperty controllableProperty) {
-        controllableProperties.removeIf(acp -> Objects.equals(controllableProperty.getName(), acp.getName()));
-        controllableProperties.add(controllableProperty);
-    }
-
-    /**
      * Update value of a cached controllable property to a new value
      *
      * @param roomId       id of the zoomRoom to look up
@@ -2066,7 +2004,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 properties.put(METRICS_ROOM_STATUS, "Connecting");
                 zoomRoomsMetricsData.get(roomId).put(METRICS_ROOM_STATUS, "Connecting");
             }
-            createRoomControls(properties, advancedControllableProperties);
         }
     }
 
