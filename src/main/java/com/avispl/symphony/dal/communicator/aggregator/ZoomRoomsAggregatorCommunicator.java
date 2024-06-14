@@ -17,6 +17,7 @@ import com.avispl.symphony.dal.aggregator.parser.AggregatedDeviceProcessor;
 import com.avispl.symphony.dal.aggregator.parser.PropertiesMapping;
 import com.avispl.symphony.dal.aggregator.parser.PropertiesMappingParser;
 import com.avispl.symphony.dal.communicator.RestCommunicator;
+import com.avispl.symphony.dal.communicator.aggregator.authentication.AuthenticationType;
 import com.avispl.symphony.dal.communicator.aggregator.settings.Setting;
 import com.avispl.symphony.dal.communicator.aggregator.settings.ZoomRoomsSetting;
 import com.avispl.symphony.dal.communicator.aggregator.status.RoomStatusProcessor;
@@ -43,6 +44,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import static com.avispl.symphony.dal.communicator.aggregator.properties.PropertyNameConstants.*;
+import static com.avispl.symphony.dal.util.ControllablePropertyFactory.createButton;
 
 /**
  * Communicator retrieves information about all the ZoomRooms on a specific account.
@@ -55,9 +57,7 @@ import static com.avispl.symphony.dal.communicator.aggregator.properties.Propert
 public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements Aggregator, Monitorable, Controller {
 
     /**
-     * Paginated response interface, needed to delegate paginated meetings to a caller
-     * @author Maksym.Rossiytsev
-     * @since 1.0.0
+     *
      * */
     private interface PaginatedResponseProcessor {
         void process(JsonNode response);
@@ -103,6 +103,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     try {
                         logDebugMessage("Fetching devices list.");
                         fetchDevicesList();
+                        knownErrors.remove(ROOMS_LIST_RETRIEVAL_ERROR_KEY);
+                        logDebugMessage("Fetched devices list: " + aggregatedDevices);
                     } catch (Exception e) {
                         knownErrors.put(ROOMS_LIST_RETRIEVAL_ERROR_KEY, limitErrorMessageByLength(e.getMessage(), maxErrorLength));
                         logger.error("Error occurred during device list retrieval: " + e.getMessage() + " with cause: " + e.getCause().getMessage(), e);
@@ -131,6 +133,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         // The following request collect all the information, so in order to save number of requests, which is
                         // daily limited for certain APIs, we need to request them once per monitoring cycle.
                         retrieveZoomRoomMetrics();
+                        knownErrors.remove(ROOMS_METRICS_RETRIEVAL_ERROR_KEY);
                     } catch (Exception e) {
                         knownErrors.put(ROOMS_METRICS_RETRIEVAL_ERROR_KEY, limitErrorMessageByLength(e.getMessage(), maxErrorLength));
                         logger.error("Error occurred during ZoomRooms metrics retrieval: " + e.getMessage() + " with cause: " + e.getCause().getMessage());
@@ -226,7 +229,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
                     }
                 }
-                if (!path.contains(ZOOM_ROOM_OAUTH_URL) && (response.getStatusCode().equals(HttpStatus.UNAUTHORIZED)
+                if (authenticationType == AuthenticationType.OAuth && !path.contains(ZOOM_ROOM_OAUTH_URL) && (response.getStatusCode().equals(HttpStatus.UNAUTHORIZED)
                         || System.currentTimeMillis() >= oauthTokenExpiresIn + oauthTokenGeneratedTimestamp || oauthTokenGeneratedTimestamp == 0L)) {
                     try {
                         authenticate();
@@ -275,8 +278,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * */
     private static final String ZOOM_ROOM_OAUTH_URL = "oauth/token";
 
+    private static final String ZOOM_ROOM_CLIENT_RPC_URL = "rooms/%s/zrclient"; // Required room user id
+    private static final String ZOOM_ROOM_CLIENT_RPC_MEETINGS_URL = "rooms/%s/meetings"; // Required room user id
+
     private AggregatedDeviceProcessor aggregatedDeviceProcessor;
 
+    /**
+     * API Token (JWT) used for authorization in Zoom API
+     */
+    private volatile String jwtToken;
     /**
      * API Token (OAuth) used for authorization in Zoom API
      */
@@ -364,6 +374,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Include room devices endpoint statistics
      * */
     private boolean includeRoomDevicesInCalls = false;
+
+    /**
+     * Authentication type to use. Default value is JWT
+     * @since 1.1.0
+     * */
+    private AuthenticationType authenticationType = AuthenticationType.JWT;
 
     /**
      * Configurable zoom OAuth hostname, zoom.us by default
@@ -745,6 +761,27 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
+     * Retrieves {@link #authenticationType}
+     *
+     * @return value of {@link #authenticationType}
+     */
+    public String getAuthenticationType() {
+        return authenticationType.name();
+    }
+
+    /**
+     * Sets {@link #authenticationType} value
+     *
+     * @param authenticationType new value of {@link #authenticationType}
+     */
+    public void setAuthenticationType(String authenticationType) {
+        if (authenticationType == null) {
+            this.authenticationType = AuthenticationType.JWT;
+        }
+        this.authenticationType = AuthenticationType.valueOf(authenticationType);
+    }
+
+    /**
      * Retrieves {@code {@link #liveMeetingDetailsDailyRequestRateThreshold }}
      *
      * @return value of {@link #liveMeetingDetailsDailyRequestRateThreshold}
@@ -1052,11 +1089,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      * {@inheritDoc}
      *
-     * OAuth based authorization
+     * JWT authentication type does not need any specific method to authenticate since it's based on a static jwt.
+     * OAuth has a separate process based on clientId/clientSecret and accountId.
      */
     @Override
     protected void authenticate() throws Exception {
-        generateAccessToken();
+        if (authenticationType == AuthenticationType.OAuth) {
+            generateAccessToken();
+        }
     }
 
     /**
@@ -1097,8 +1137,25 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     controlValidated = true;
                     return;
                 } else {
-                    if (logger.isWarnEnabled()) {
-                        logger.warn(String.format("Controllable Property %s is unsupported", property));
+                    String id = retrieveIdByRoomId(roomId);
+                    switch (property) {
+                        case LEAVE_CURRENT_MEETING_CONTROL:
+                            leaveCurrentMeeting(id);
+                            controlValidated = true;
+                            break;
+                        case END_CURRENT_MEETING_CONTROL:
+                            endCurrentMeeting(id);
+                            controlValidated = true;
+                            break;
+                        case RESTART_ZOOM_ROOMS_CLIENT_CONTROL:
+                            restartZoomRoomClient(id);
+                            controlValidated = true;
+                            break;
+                        case START_ROOM_PMI_CONTROL:
+                            joinRoomPMI(id);
+                            controlValidated = true;
+                        default:
+                            break;
                     }
                 }
             } finally {
@@ -1163,6 +1220,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
         dynamicStatistics.put("MonitoredDevicesTotal", String.valueOf(aggregatedDevices.size()));
 
+        statistics.put("AuthenticationType", authenticationType.name());
         knownErrors.forEach((key, value) -> statistics.put("Errors#" + key, value));
         if (metricsRateLimitRemaining != null) {
             statistics.put("DashboardMetricsDailyRateLimitRemaining", String.valueOf(metricsRateLimitRemaining));
@@ -1182,6 +1240,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         logDebugMessage("Internal init is called.");
         adapterInitializationTimestamp = System.currentTimeMillis();
         setBaseUri(BASE_ZOOM_URL);
+        jwtToken = getPassword();
         // To synchronize with the format that Zoom API provides
         dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
 
@@ -1276,12 +1335,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     @Override
     protected HttpHeaders putExtraRequestHeaders(HttpMethod httpMethod, String uri, HttpHeaders headers) throws Exception {
         headers.add("Content-Type", "application/json");
+        String accessToken = authenticationType == AuthenticationType.OAuth ? oAuthAccessToken : jwtToken;
         if (uri.contains(ZOOM_ROOM_OAUTH_URL)) {
             String oauthPair = getLogin() + ":" + getPassword(); // ClientId:ClientSecret in OAuth flow
             logDebugMessage("Attempt to generate OAuth token with credentials: " + oauthPair);
             headers.add("Authorization", "Basic " + Base64.getEncoder().encodeToString(oauthPair.getBytes(StandardCharsets.UTF_8)));
         } else {
-            headers.add("Authorization", "Bearer " + oAuthAccessToken);
+            headers.add("Authorization", "Bearer " + accessToken);
         }
         return super.putExtraRequestHeaders(httpMethod, uri, headers);
     }
@@ -1357,10 +1417,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             aggregatedDevices.clear();
         }
         aggregatedDevices.keySet().removeIf(deviceId -> !retrievedRoomIds.contains(deviceId));
-        nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
 
-        knownErrors.remove(ROOMS_LIST_RETRIEVAL_ERROR_KEY);
-        logDebugMessage("Fetched devices list: " + aggregatedDevices);
+        nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
     }
 
     /**
@@ -1537,6 +1595,19 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 .stream()
                 .filter(aggregatedDevice -> list.contains(aggregatedDevice.getDeviceId()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Build rpc request for rpc operations (client reboot, leave or end current meeting)
+     *
+     * @param method to use for rpc request
+     * @return {@code Map<String, String>} request map
+     */
+    private Map<String, Object> buildRpcRequest(String method) {
+        Map<String, Object> command = new HashMap<>();
+        command.put("jsonrpc", "2.0");
+        command.put("method", method);
+        return command;
     }
 
     /**
@@ -1733,6 +1804,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         List<AdvancedControllableProperty> controllableProperties = aggregatedZoomRoomDevice.getControllableProperties();
         if (!excludePropertyGroups.contains("RoomDevices")) {
             retrieveGroupedRoomDevicesInformation(roomId, properties);
+            createRoomControls(properties, controllableProperties);
         }
         if (!excludePropertyGroups.contains("RoomControlSettings")) {
             populateRoomSettings(roomId, properties, controllableProperties);
@@ -1975,6 +2047,43 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
+     * Create a list of RoomControls based on room status and save them to properties
+     *
+     * @param properties             map to save statistics values to
+     * @param controllableProperties list to save controllable properties to
+     */
+    private void createRoomControls(Map<String, String> properties, List<AdvancedControllableProperty> controllableProperties) {
+        cleanupStaleProperties(properties, ROOM_CONTROLS_GROUP);
+        cleanupStaleControls(controllableProperties, ROOM_CONTROLS_GROUP);
+
+        if (authenticationType == AuthenticationType.OAuth) {
+            logDebugMessage("RoomControls group is omitted: authenticationType is set to OAuth");
+            return;
+        }
+        String roomStatus = properties.get(METRICS_ROOM_STATUS);
+        if (!StringUtils.isNullOrEmpty(roomStatus)) {
+            if ((roomStatus.equals("InMeeting") || roomStatus.equals("Connecting"))) {
+                properties.put(END_CURRENT_MEETING_CONTROL, "");
+                controllableProperties.add(createButton(END_CURRENT_MEETING_CONTROL, "End", "Ending...", 0L));
+
+                properties.put(LEAVE_CURRENT_MEETING_CONTROL, "");
+                controllableProperties.add(createButton(LEAVE_CURRENT_MEETING_CONTROL, "Leave", "Leaving...", 0L));
+
+                properties.remove(START_ROOM_PMI_CONTROL);
+            } else if (!roomStatus.equals("Offline")) {
+                properties.put(START_ROOM_PMI_CONTROL, "");
+                properties.put(RESTART_ZOOM_ROOMS_CLIENT_CONTROL, "");
+
+                controllableProperties.add(createButton(RESTART_ZOOM_ROOMS_CLIENT_CONTROL, "Restart", "Restarting...", 0L));
+                controllableProperties.add(createButton(START_ROOM_PMI_CONTROL, "Start", "Starting...", 0L));
+
+                properties.remove(END_CURRENT_MEETING_CONTROL);
+                properties.remove(LEAVE_CURRENT_MEETING_CONTROL);
+            }
+        }
+    }
+
+    /**
      * Update value of a cached controllable property to a new value
      *
      * @param roomId       id of the zoomRoom to look up
@@ -2005,6 +2114,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 properties.put(METRICS_ROOM_STATUS, "Connecting");
                 zoomRoomsMetricsData.get(roomId).put(METRICS_ROOM_STATUS, "Connecting");
             }
+            createRoomControls(properties, advancedControllableProperties);
         }
     }
 
@@ -2064,7 +2174,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 throw ex;
             }
         }
-        knownErrors.remove(ROOMS_METRICS_RETRIEVAL_ERROR_KEY);
     }
 
     /**
@@ -2175,6 +2284,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
+     * For all jsonRpc operations ID is needed as a room identifier, but for the rest of operations - room_id is used.
+     * This method should check caches and retrieve id(serial number) from the devices there, based on the room_id.
+     *
+     * @param roomId id of a ZoomRoom
+     * @return String value of serial number (room id in a system)
+     */
+    private String retrieveIdByRoomId(String roomId) {
+        AggregatedDevice room = aggregatedDevices.get(roomId);
+        if (room != null) {
+            return room.getSerialNumber();
+        }
+        return null;
+    }
+
+    /**
      * Update the status of the device.
      * The device is considered as paused if did not receive any retrieveMultipleStatistics()
      * calls during {@link ZoomRoomsAggregatorCommunicator#validRetrieveStatisticsTimestamp}
@@ -2191,6 +2315,16 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private synchronized void updateValidRetrieveStatisticsTimestamp() {
         validRetrieveStatisticsTimestamp = System.currentTimeMillis() + retrieveStatisticsTimeOut;
         updateAggregatorStatus();
+    }
+
+    /**
+     * Restart ZoomRoom client by sending jsonRpc command
+     *
+     * @param userId id of the room user to restart
+     * @throws Exception if any error occurs
+     */
+    private void restartZoomRoomClient(String userId) throws Exception {
+        doPost(String.format(ZOOM_ROOM_CLIENT_RPC_URL, userId), buildRpcRequest("restart"));
     }
 
     /**
@@ -2225,6 +2359,51 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             return false;
         });
+    }
+
+    /**
+     * End current Zoom meeting by sending jsonRpc command
+     *
+     * @param userId id of the room user to make end current meeting for
+     * @throws Exception if any error occurs
+     */
+    private void endCurrentMeeting(String userId) throws Exception {
+        doPost(String.format(ZOOM_ROOM_CLIENT_RPC_MEETINGS_URL, userId), buildRpcRequest("end"));
+    }
+
+    /**
+     * Leave current Zoom meeting by sending jsonRpc command
+     *
+     * @param userId id of the room user to make leave the meeting
+     * @throws Exception if any error occurs
+     */
+    private void leaveCurrentMeeting(String userId) throws Exception {
+        doPost(String.format(ZOOM_ROOM_CLIENT_RPC_MEETINGS_URL, userId), buildRpcRequest("leave"));
+    }
+
+    /**
+     * Join room user's Personal meeting room
+     *
+     * @param userId id of the room user to make leave the meeting
+     * @throws Exception if any error occurs
+     */
+    private void joinRoomPMI(String userId) throws Exception {
+        Map<String, Object> request = buildRpcRequest("join");
+
+        Map<String, String> params = new HashMap<>();
+        aggregatedDevices.values().stream().filter(aggregatedDevice ->
+                aggregatedDevice.getSerialNumber().equals(userId)).findFirst().ifPresent(aggregatedDevice -> {
+            Map<String, String> properties = aggregatedDevice.getProperties();
+            if (properties != null) {
+                params.put("meeting_number", properties.get(ROOM_USER_DETAILS_PMI));
+            }
+        });
+        if (params.isEmpty()) {
+            throw new IllegalArgumentException("Unable to start Personal Meeting for user " + userId);
+        }
+
+        request.put("params", params);
+        doPost(String.format(ZOOM_ROOM_CLIENT_RPC_MEETINGS_URL, userId), request);
     }
 
     /**

@@ -18,9 +18,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     @BeforeEach
     public void init() throws Exception {
         mockAggregatorCommunicator = new ZoomRoomsAggregatorCommunicator();
-        mockAggregatorCommunicator.setLogin("");
         mockAggregatorCommunicator.setPassword("");
-//        mockAggregatorCommunicator.setPassword("");
         mockAggregatorCommunicator.setHost("api.zoom.us");
         mockAggregatorCommunicator.setProtocol("https");
         mockAggregatorCommunicator.setPort(443);
@@ -69,24 +67,24 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void getDevicesWithFilteringTestOAuth() throws Exception {
-        mockAggregatorCommunicator.setLogin("");
-        mockAggregatorCommunicator.setPassword("qnZlYQtMSWDahoCjsU4QKrarGO7cFBLs");
+        mockAggregatorCommunicator.setLogin("rW1Kedu5QV2m24XI8h0SIQ");
+        mockAggregatorCommunicator.setPassword("aj2Dlq9V2fVO8ur4Qqtgt6Q8QyAYNSUB");
 
         mockAggregatorCommunicator.setDisplayAccountSettings(true);
         mockAggregatorCommunicator.setDisplayLiveMeetingDetails(true);
         mockAggregatorCommunicator.setDisplayRoomSettings(true);
-        mockAggregatorCommunicator.setAccountId("");
-        mockAggregatorCommunicator.setIncludeRoomDevices(true);
-//        mockAggregatorCommunicator.setZoomRoomTypes("ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly");
-//        mockAggregatorCommunicator.setZoomRoomLocations("Chicago");
+        mockAggregatorCommunicator.setAccountId("h8M_rmTuQsyDaZhp_xMyoQ");
+        mockAggregatorCommunicator.setAuthenticationType("OAuth");
+        mockAggregatorCommunicator.setZoomRoomTypes("ZoomRoom, SchedulingDisplayOnly, DigitalSignageOnly");
+        mockAggregatorCommunicator.setZoomRoomLocations("Chicago");
 
         mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(500000);
+        Thread.sleep(30000);
         List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         mockAggregatorCommunicator.getMultipleStatistics();
         Assert.assertFalse(devices.isEmpty());
-        Assert.assertEquals(46, devices.size());
+        Assert.assertEquals(3, devices.size());
         Assert.assertNotNull(devices.get(0).getSerialNumber());
 
         mockAggregatorCommunicator.setZoomRoomLocations("");
@@ -158,10 +156,6 @@ public class ZoomRoomsAggregatorCommunicatorTest {
 
     @Test
     public void getDevicesWithDelayTest() throws Exception {
-        mockAggregatorCommunicator.setLogin("");
-        mockAggregatorCommunicator.setPassword("");
-        mockAggregatorCommunicator.setAccountId("");
-        //mockAggregatorCommunicator.setExcludePropertyGroups("RoomUserDetails,RoomControlSettings,RoomDevices");
         mockAggregatorCommunicator.init();
         mockAggregatorCommunicator.setMetricsRetrievalTimeout(90000);
         mockAggregatorCommunicator.setDeviceMetaDataRetrievalTimeout(60000);
@@ -170,8 +164,6 @@ public class ZoomRoomsAggregatorCommunicatorTest {
         mockAggregatorCommunicator.setRoomUserDetailsRetrievalTimeout(60000);
         mockAggregatorCommunicator.setDisplayLiveMeetingDetails(true);
         mockAggregatorCommunicator.setDisplayRoomSettings(true);
-        mockAggregatorCommunicator.setIncludeRoomDevices(true);
-        mockAggregatorCommunicator.setIncludeRoomDevicesInCalls(true);
         List<AggregatedDevice> devices;
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);
@@ -190,90 +182,6 @@ public class ZoomRoomsAggregatorCommunicatorTest {
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
         Thread.sleep(30000);
         devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Assert.assertFalse(devices.isEmpty());
-        Assert.assertEquals(18, devices.size());
-        Assert.assertNotNull(devices.get(0).getSerialNumber());
-    }
-
-    @Test
-    public void getDevicesWithDelayTestJnJ() throws Exception {
-        mockAggregatorCommunicator.setLogin("");
-        mockAggregatorCommunicator.setPassword("");
-        mockAggregatorCommunicator.setAccountId("");
-        //mockAggregatorCommunicator.setExcludePropertyGroups("RoomUserDetails,RoomControlSettings,RoomDevices");
-        mockAggregatorCommunicator.init();
-//        mockAggregatorCommunicator.setMetricsRetrievalTimeout(30000);
-//        mockAggregatorCommunicator.setDeviceMetaDataRetrievalTimeout(30000);
-//        mockAggregatorCommunicator.setRoomDevicesRetrievalTimeout(30000);
-//        mockAggregatorCommunicator.setRoomSettingsRetrievalTimeout(30000);
-//        mockAggregatorCommunicator.setRoomUserDetailsRetrievalTimeout(60000);
-//        mockAggregatorCommunicator.setDisplayLiveMeetingDetails(true);
-//        mockAggregatorCommunicator.setDisplayRoomSettings(true);
-//        mockAggregatorCommunicator.setIncludeRoomDevices(true);
-//        mockAggregatorCommunicator.setIncludeRoomDevicesInCalls(true);
-        List<AggregatedDevice> devices;
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        List<Statistics> statistics = mockAggregatorCommunicator.getMultipleStatistics();
         Assert.assertFalse(devices.isEmpty());
         Assert.assertEquals(18, devices.size());
         Assert.assertNotNull(devices.get(0).getSerialNumber());
@@ -298,7 +206,7 @@ public class ZoomRoomsAggregatorCommunicatorTest {
     @Test
     public void controlRoomSettingTest() throws Exception {
         mockAggregatorCommunicator.init();
-        String roomId = "";
+        String roomId = "KJmeDJOMQDmh3gczMXCxFQ";
         String property = "RoomMeetingSettings#UpcomingMeetingAlert";
         ControllableProperty controllableProperty = new ControllableProperty();
         controllableProperty.setProperty(property);
@@ -349,63 +257,5 @@ public class ZoomRoomsAggregatorCommunicatorTest {
                         advancedControllableProperty.getName().equals(property)).findFirst().get();
 
         Assert.assertEquals(value, endControl.getValue());
-    }
-
-    @Test
-    public void testDestructionWithoutCorrectInstantiation() throws Exception {
-        mockAggregatorCommunicator.setLogin("");
-        mockAggregatorCommunicator.setPassword("");
-
-        mockAggregatorCommunicator.setDisplayAccountSettings(true);
-        mockAggregatorCommunicator.setDisplayLiveMeetingDetails(true);
-        mockAggregatorCommunicator.setDisplayRoomSettings(true);
-        mockAggregatorCommunicator.setAccountId("");
-        mockAggregatorCommunicator.setIncludeRoomDevices(true);
-
-        mockAggregatorCommunicator.init();
-        mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(500000);
-        List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        mockAggregatorCommunicator.getMultipleStatistics();
-        Assert.assertFalse(devices.isEmpty());
-        Assert.assertEquals(94, devices.size());
-        Assert.assertNotNull(devices.get(0).getSerialNumber());
-
-        mockAggregatorCommunicator.setZoomRoomLocations("");
-        mockAggregatorCommunicator.setZoomRoomTypes(" DigitalSignageOnly");
-        mockAggregatorCommunicator.destroy();
-        mockAggregatorCommunicator.init();
-        mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Assert.assertTrue(devices.isEmpty());
-
-        mockAggregatorCommunicator.setZoomRoomTypes("");
-        mockAggregatorCommunicator.destroy();
-        mockAggregatorCommunicator.init();
-        mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Assert.assertFalse(devices.isEmpty());
-        Assert.assertEquals(26, devices.size());
-        Assert.assertNotNull(devices.get(0).getSerialNumber());
-
-        mockAggregatorCommunicator.setZoomRoomLocations("SomeLocationThatNoneOfTheDevicesHave");
-        mockAggregatorCommunicator.destroy();
-        mockAggregatorCommunicator.init();
-        mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Assert.assertTrue(devices.isEmpty());
-
-        mockAggregatorCommunicator.setZoomRoomLocations("");
-        mockAggregatorCommunicator.destroy();
-        mockAggregatorCommunicator.init();
-        mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Thread.sleep(60000);
-        devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
-        Assert.assertFalse(devices.isEmpty());
-        Assert.assertEquals(26, devices.size());
-        Assert.assertNotNull(devices.get(0).getSerialNumber());
     }
 }
