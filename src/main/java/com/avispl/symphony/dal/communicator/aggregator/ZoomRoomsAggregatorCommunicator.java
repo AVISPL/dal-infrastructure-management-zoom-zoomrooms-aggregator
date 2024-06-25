@@ -1314,6 +1314,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         aggregatedDevices.values().forEach(aggregatedDevice -> aggregatedDevice.setTimestamp(currentTimestamp));
         logDebugMessage("Zoom Rooms Collected Devices: " + aggregatedDevices.values());
 
+        aggregatedDevices.values().forEach(aggregatedDevice -> {
+            Map<String, String> properties = aggregatedDevice.getProperties();
+            if (properties.containsKey(METRICS_ROOM_STATUS) && properties.get(METRICS_ROOM_STATUS).equals("InMeeting")) {
+                setRoomInCall(aggregatedDevice, true);
+            } else {
+                cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
+                setRoomInCall(aggregatedDevice, false);
+            }
+        });
         return new ArrayList<>(aggregatedDevices.values());
     }
 
@@ -1338,15 +1347,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         List<String> retrievedRoomIds = new ArrayList<>();
         fetchRooms(retrievedRoomIds);
         aggregatedDevices.keySet().removeIf(existingDevice -> !retrievedRoomIds.contains(existingDevice) && !existingDevice.startsWith(ROOM_DEVICE_ID_PREFIX));
-
-        aggregatedDevices.values().forEach(aggregatedDevice -> {
-            Map<String, String> properties = aggregatedDevice.getProperties();
-            if (properties.containsKey(METRICS_ROOM_STATUS) && properties.get(METRICS_ROOM_STATUS).equals("InMeeting")) {
-                setRoomInCall(aggregatedDevice, true);
-            } else {
-                setRoomInCall(aggregatedDevice, false);
-            }
-        });
 
         if (includeRoomDevices){
             fetchRoomDevices(retrievedRoomIds);
@@ -1723,7 +1723,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             setRoomInCall(aggregatedZoomRoomDevice, true);
         } else {
             cleanupStaleProperties(properties, LIVE_MEETING_GROUP);
-
             setRoomInCall(aggregatedZoomRoomDevice, false);
         }
 
