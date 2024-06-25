@@ -1753,33 +1753,22 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * */
     private void setRoomInCall(AggregatedDevice aggregatedZoomRoomDevice, boolean inCall) {
             List<Statistics> statistics = aggregatedZoomRoomDevice.getMonitoredStatistics();
-            if (inCall) {
                 // if device is in the meeting - attempt to retrieve meeting details from the detailed metrics
-                if (statistics == null) {
-                    statistics = new ArrayList<>();
-                    aggregatedZoomRoomDevice.setMonitoredStatistics(statistics);
+            if (statistics == null) {
+                statistics = new ArrayList<>();
+                aggregatedZoomRoomDevice.setMonitoredStatistics(statistics);
+            }
+            boolean deviceHasEndpointStatistics = false;
+            for (Statistics statsEntry: statistics) {
+                if (statsEntry instanceof EndpointStatistics) {
+                    deviceHasEndpointStatistics = true;
+                    ((EndpointStatistics) statsEntry).setInCall(inCall);
                 }
-                boolean deviceHasEndpointStatistics = false;
-                for (Statistics statsEntry: statistics) {
-                    if (statsEntry instanceof EndpointStatistics) {
-                        deviceHasEndpointStatistics = true;
-                        ((EndpointStatistics) statsEntry).setInCall(true);
-                    }
-                }
-                if (!deviceHasEndpointStatistics) {
-                    EndpointStatistics endpointStatistics = new EndpointStatistics();
-                    endpointStatistics.setInCall(true);
-                    statistics.add(endpointStatistics);
-                }
-            } else {
-                // if the device is not in the meeting
-                if (statistics != null) {
-                    for (Statistics statsEntry : statistics) {
-                        if (statsEntry instanceof EndpointStatistics) {
-                            ((EndpointStatistics) statsEntry).setInCall(false);
-                        }
-                    }
-                }
+            }
+            if (!deviceHasEndpointStatistics) {
+                EndpointStatistics endpointStatistics = new EndpointStatistics();
+                endpointStatistics.setInCall(inCall);
+                statistics.add(endpointStatistics);
             }
     }
 
