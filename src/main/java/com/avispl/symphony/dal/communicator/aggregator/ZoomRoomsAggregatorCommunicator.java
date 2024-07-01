@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 AVI-SPL, Inc. All Rights Reserved.
+ * Copyright (c) 2021-2024 AVI-SPL, Inc. All Rights Reserved.
  */
 package com.avispl.symphony.dal.communicator.aggregator;
 
@@ -17,6 +17,7 @@ import com.avispl.symphony.dal.aggregator.parser.AggregatedDeviceProcessor;
 import com.avispl.symphony.dal.aggregator.parser.PropertiesMapping;
 import com.avispl.symphony.dal.aggregator.parser.PropertiesMappingParser;
 import com.avispl.symphony.dal.communicator.RestCommunicator;
+import com.avispl.symphony.dal.communicator.aggregator.properties.PropertyNameConstants;
 import com.avispl.symphony.dal.communicator.aggregator.settings.Setting;
 import com.avispl.symphony.dal.communicator.aggregator.settings.ZoomRoomsSetting;
 import com.avispl.symphony.dal.communicator.aggregator.status.RoomStatusProcessor;
@@ -37,6 +38,8 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
@@ -239,6 +242,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 }
                 return response;
             } catch (Exception e) {
+                //knownErrors.put(LOGIN_ERROR_KEY, e.getMessage());
                 logger.error("An exception occurred during request execution", e);
             }
             return response;
@@ -1155,9 +1159,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             });
         }
 
-        statistics.put("AdapterVersion", adapterProperties.getProperty("mock.aggregator.version"));
-        statistics.put("AdapterBuildDate", adapterProperties.getProperty("mock.aggregator.build.date"));
-        statistics.put("AdapterUptime", normalizeUptime((System.currentTimeMillis() - adapterInitializationTimestamp) / 1000));
+        statistics.put(ADAPTER_VERSION, adapterProperties.getProperty("mock.aggregator.version"));
+        statistics.put(ADAPTER_BUILD_DATE, adapterProperties.getProperty("mock.aggregator.build.date"));
+
+        long adapterUptime = System.currentTimeMillis() - adapterInitializationTimestamp;
+        statistics.put(ADAPTER_UPTIME_MIN, String.valueOf(adapterUptime / (1000*60)));
+        statistics.put(ADAPTER_UPTIME, normalizeUptime(adapterUptime/1000));
+
         if (lastMonitoringCycleDuration != null) {
             dynamicStatistics.put("LastMonitoringCycleDuration(s)", String.valueOf(lastMonitoringCycleDuration));
         }
@@ -1290,8 +1298,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * {@inheritDoc}
      */
     @Override
-    public List<AggregatedDevice> retrieveMultipleStatistics() {
+    public List<AggregatedDevice> retrieveMultipleStatistics() throws FailedLoginException {
         logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, serviceRunning: %s, devicesExecutionPool: %s", isInitialized(), executorService != null, serviceRunning, devicesExecutionPool.size()));
+        if (knownErrors.containsKey(LOGIN_ERROR_KEY)) {
+            throw new FailedLoginException(knownErrors.get(LOGIN_ERROR_KEY));
+        }
         updateValidRetrieveStatisticsTimestamp();
         dataCollectorOperationsLock.lock();
         try {
@@ -1603,6 +1614,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     logger.error(String.format("ZoomRooms API error %s while retrieving %s data", e.getStatusCode(), url), e);
                     break;
                 }
+            } catch (FailedLoginException fle) {
+                lastError = fle;
+                criticalError = true;
+                break;
             } catch (Exception e) {
                 lastError = e;
                 // if service is running, log error
@@ -1628,7 +1643,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             } else if (lastError instanceof FailedLoginException) {
                 String errorMessage = String.format("Unauthorized to perform the request %s: %s", url, lastError.getLocalizedMessage());
                 transformAndSaveException(new FailedLoginException(errorMessage));
-                return null;
+                throw lastError;
             } else {
                 transformAndSaveException(lastError);
             }
@@ -2036,8 +2051,20 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     for (JsonNode metric : roomsMetrics.get("zoom_rooms")) {
                         Map<String, String> metricsData = new HashMap<>();
                         if (metric != null) {
+                            String roomId = metric.at("/id").asText();
                             aggregatedDeviceProcessor.applyProperties(metricsData, metric, "ZoomRoomMetrics");
-                            zoomRoomsMetricsData.put(metric.at("/id").asText(), metricsData);
+                            zoomRoomsMetricsData.put(roomId, metricsData);
+                            AggregatedDevice zoomRoom = aggregatedDevices.get(roomId);
+                            if (zoomRoom != null && zoomRoom.getDeviceOnline()) {
+                                String loadDate = metricsData.get("Metrics#LastStartTime");
+                                Instant loadDateParsed = Instant.parse(loadDate);
+                                Duration uptime = Duration.between(loadDateParsed, Instant.now());
+
+                                // Cant get seconds due to the language version
+                                metricsData.put(METRICS_DATA_DEVICE_UPTIME, normalizeUptime(uptime.toMinutes() * 60));
+                                metricsData.put(METRICS_DATA_DEVICE_UPTIME_MIN, String.valueOf(uptime.toMinutes()));
+                            }
+
                             metricsData.put(METRICS_DATA_RETRIEVED_TIME, dateFormat.format(new Date()));
                         }
                     }
@@ -2282,7 +2309,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
         String requestUrl = String.format("%s://%s/%s", getProtocol(), zoomOAuthHostname, ZOOM_ROOM_OAUTH_URL + String.format(ZOOM_ROOM_OAUTH_PARAMS_URL, accountId));
         logDebugMessage("Attempting to generate access token with requestUrl " + requestUrl);
-        JsonNode response = doPost(requestUrl, null, JsonNode.class);
+        JsonNode response = null;
+        try {
+            response = doPost(requestUrl, null, JsonNode.class);
+        } catch (Exception e) {
+            String message = "Authorization Failed: " + e.getMessage();
+            knownErrors.put(LOGIN_ERROR_KEY, message);
+            throw new FailedLoginException(message);
+        }
         if (response == null) {
             String message = String.format("Failed to authorize account with id %s through OAuth chain. Please check client data or OAuth application settings.", accountId);
             knownErrors.put(LOGIN_ERROR_KEY, message);
