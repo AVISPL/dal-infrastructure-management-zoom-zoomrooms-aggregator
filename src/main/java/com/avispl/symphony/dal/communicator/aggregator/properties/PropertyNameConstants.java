@@ -10,6 +10,18 @@ package com.avispl.symphony.dal.communicator.aggregator.properties;
  * @since 1.0.0
  */
 public class PropertyNameConstants {
+    /** @since 1.2.2 */
+    public static final String METRICS_DATA_DEVICE_UPTIME = "Metrics#Uptime";
+    /** @since 1.2.2 */
+    public static final String METRICS_DATA_DEVICE_UPTIME_MIN = "Metrics#Uptime(min)";
+    /** @since 1.2.2 */
+    public static final String ADAPTER_UPTIME = "AdapterUptime";
+    /** @since 1.2.2 */
+    public static final String ADAPTER_UPTIME_MIN = "AdapterUptime(min)";
+    /** @since 1.2.2 */
+    public static final String ADAPTER_BUILD_DATE = "AdapterBuildDate";
+    /** @since 1.2.2 */
+    public static final String ADAPTER_VERSION = "AdapterVersion";
     /** @since 1.0.1 */
     public static final String METRICS_DATA_RETRIEVED_TIME = "Metrics#DataRetrievedTime";
     /** @since 1.0.1 */
