@@ -1340,7 +1340,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     properties.put(METRICS_DATA_DEVICE_UPTIME_MIN, "ZR Offline");
                 }
             } catch (Exception e) {
-                logger.error("An error occured during call status setting for room" + aggregatedDevice.getDeviceId() + callStatus);
+                logger.error("An error occurred during call status setting for room " + aggregatedDevice.getDeviceId() + ":" + callStatus, e);
             }
         }
         return new ArrayList<>(aggregatedDevices.values());
@@ -1787,12 +1787,17 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * */
     private synchronized void setRoomInCall(AggregatedDevice aggregatedZoomRoomDevice, boolean inCall) {
         List<Statistics> statistics = aggregatedZoomRoomDevice.getMonitoredStatistics();
+
         String roomId = aggregatedZoomRoomDevice.getDeviceId();
         // if device is in the meeting - attempt to retrieve meeting details from the detailed metrics
+        // Also need to make sure we aren't trying to manipulate readonly collections
+        if (statistics != null) {
+            statistics = new ArrayList<>(statistics);
+        }
         if (statistics == null) {
             statistics = new ArrayList<>();
-            aggregatedZoomRoomDevice.setMonitoredStatistics(statistics);
         }
+        aggregatedZoomRoomDevice.setMonitoredStatistics(statistics);
         statistics.clear();
 
         EndpointStatistics endpointStatistics = new EndpointStatistics();
