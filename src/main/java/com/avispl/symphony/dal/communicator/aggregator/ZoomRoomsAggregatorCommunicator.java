@@ -357,6 +357,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private AuthenticationType authenticationType = AuthenticationType.JWT;
 
     /**
+     * Authentication type to use. Default value is JWT
+     * @since 1.1.0
+     * */
+    private AuthenticationType authenticationType = AuthenticationType.JWT;
+
+    /**
      * Configurable zoom OAuth hostname, zoom.us by default
      * @since 1.1.0
      * */
@@ -1296,6 +1302,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             // If all the devices were not populated for any specific reason (no devices available, filtering, etc)
             aggregatedDevices.clear();
         }
+        aggregatedDevices.keySet().removeIf(deviceId -> !retrievedRoomIds.contains(deviceId));
 
         nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
     }
@@ -1666,6 +1673,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         populateRoomUserDetails(aggregatedZoomRoomDevice.getSerialNumber(), properties);
 
         List<AdvancedControllableProperty> controllableProperties = aggregatedZoomRoomDevice.getControllableProperties();
+        if (!excludePropertyGroups.contains("RoomDevices")) {
+            retrieveGroupedRoomDevicesInformation(roomId, properties);
+            createRoomControls(properties, controllableProperties);
+        }
+        if (!excludePropertyGroups.contains("RoomControlSettings")) {
+            populateRoomSettings(roomId, properties, controllableProperties);
+        }
 
         populateRoomSettings(roomId, properties, controllableProperties);
         retrieveGroupedRoomDevicesInformation(roomId, properties);
