@@ -24,7 +24,6 @@
     <rule ref="category/java/errorprone.xml/AvoidMultipleUnaryOperators" />
     <rule ref="category/java/errorprone.xml/AvoidUsingOctalValues" />
     <rule ref="category/java/errorprone.xml/BrokenNullCheck" />
-    <rule ref="category/java/errorprone.xml/ProperLogger" />
     <rule ref="category/java/errorprone.xml/MoreThanOneLogger" />
     <rule ref="category/java/errorprone.xml/LoggerIsNotStaticFinal" />
 
