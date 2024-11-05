@@ -105,6 +105,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     }
                     try {
                         logDebugMessage("Fetching devices list.");
+                        knownErrors.clear();
                         fetchDevicesList();
                     } catch (Exception e) {
                         knownErrors.put(ROOMS_LIST_RETRIEVAL_ERROR_KEY, limitErrorMessageByLength(e.getMessage(), maxErrorLength));
@@ -224,13 +225,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 response = execution.execute(request, body);
                 String path = request.getURI().getPath();
                 if (path.contains("metrics")) {
-                    logDebugMessage("Adressing metrics endpoint " + path);
+                    logDebugMessage("Addressing metrics endpoint " + path);
                     List<String> headerData = response.getHeaders().get(RATE_LIMIT_REMAINING_HEADER);
                     if (headerData != null && !headerData.isEmpty()) {
                         metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
                     }
                 }
-                if (!path.contains(ZOOM_ROOM_OAUTH_URL) && (response.getStatusCode().equals(HttpStatus.UNAUTHORIZED)
+                if (!path.contains(ZOOM_ROOM_OAUTH_URL) && (HttpStatus.UNAUTHORIZED.equals(response.getStatusCode())
                         || System.currentTimeMillis() >= oauthTokenExpiresIn + oauthTokenGeneratedTimestamp || oauthTokenGeneratedTimestamp == 0L)) {
                     try {
                         authenticate();
@@ -1061,6 +1062,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     protected void authenticate() throws Exception {
+        disconnect();
         generateAccessToken();
     }
 
@@ -1132,9 +1134,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     public List<Statistics> getMultipleStatistics() throws Exception {
-        if (knownErrors.containsKey(LOGIN_ERROR_KEY)) {
-            throw new FailedLoginException(knownErrors.get(LOGIN_ERROR_KEY));
-        }
         Map<String, String> statistics = new HashMap<>();
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
         Map<String, String> dynamicStatistics = new HashMap<>();
@@ -1301,9 +1300,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     @Override
     public List<AggregatedDevice> retrieveMultipleStatistics() throws FailedLoginException {
         logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, serviceRunning: %s, devicesExecutionPool: %s", isInitialized(), executorService != null, serviceRunning, devicesExecutionPool.size()));
-        if (knownErrors.containsKey(LOGIN_ERROR_KEY)) {
-            throw new FailedLoginException(knownErrors.get(LOGIN_ERROR_KEY));
-        }
+
         updateValidRetrieveStatisticsTimestamp();
         dataCollectorOperationsLock.lock();
         try {
@@ -1342,6 +1339,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             } catch (Exception e) {
                 logger.error("An error occurred during call status setting for room " + aggregatedDevice.getDeviceId() + ":" + callStatus, e);
             }
+        }
+        if (knownErrors.containsKey(LOGIN_ERROR_KEY)) {
+            // Need to call it here to still have all the operations running and make sure errors are checked.
+            // Otherwise, the runner will consider device paused
+            oAuthAccessToken = null;
+            throw new FailedLoginException(knownErrors.get(LOGIN_ERROR_KEY));
         }
         return new ArrayList<>(aggregatedDevices.values());
     }
@@ -2341,7 +2344,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         try {
             response = doPost(requestUrl, null, JsonNode.class);
         } catch (Exception e) {
-            String message = "Authorization Failed: " + e.getMessage();
+            String message = String.format("Authorization Failed (error %s) during %s request processing: ", e.getClass(), requestUrl) + e.getMessage();
+            if (e instanceof CommandFailureException) {
+                message += " with code " + ((CommandFailureException) e).getStatusCode();
+            }
             knownErrors.put(LOGIN_ERROR_KEY, message);
             throw new FailedLoginException(message);
         }
