@@ -1081,8 +1081,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     protected void authenticate() throws Exception {
-        //disconnect();
-//        devicesExecutionPool.forEach(future -> future.cancel(true));
         generateAccessToken();
     }
 
