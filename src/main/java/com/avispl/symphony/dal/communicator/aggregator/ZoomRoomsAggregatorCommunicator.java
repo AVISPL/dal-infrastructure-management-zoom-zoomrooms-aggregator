@@ -25,10 +25,15 @@ import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.CookieSpecs;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.impl.client.HttpClients;
 import org.springframework.http.*;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -231,15 +236,28 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
                     }
                 }
-                if (!path.contains(ZOOM_ROOM_OAUTH_URL) && (HttpStatus.UNAUTHORIZED.equals(response.getStatusCode())
-                        || System.currentTimeMillis() >= oauthTokenExpiresIn + oauthTokenGeneratedTimestamp || oauthTokenGeneratedTimestamp == 0L)) {
+
+                if (HttpStatus.UNAUTHORIZED.equals(response.getStatusCode())) {
+                    if (authorizationLock.isLocked()) {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug(String.format("Invalid authentication token detected, re-authorization is in progress. Scheduling retry for %s. Current number of devices in cache: %s", path, aggregatedDevices.size()));
+                        }
+                        // Authorization is already in progress, so we can just end the following unauthorized request here and it will be retried
+                        return response;
+                    }
+                    authorizationLock.lock();
                     try {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug(String.format("Authentication token is expired or missing, re-authorizing for request %s. Current number of devices in cache: %s.", path, aggregatedDevices.size()));
+                        }
                         authenticate();
                         HttpHeaders headers = request.getHeaders();
                         headers.put("Authorization", Collections.singletonList("Bearer " + oAuthAccessToken));
                         response = execution.execute(request, body);
                     } catch (Exception e) {
                         logger.error("Unable to log in using OAuth.", e);
+                    } finally {
+                        authorizationLock.unlock();
                     }
                 }
                 return response;
@@ -289,21 +307,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private volatile String oAuthAccessToken;
 
     /**
-     * OAuth token expiration timestamp
-     * @since 1.1.0
+     *
      * */
-    private volatile long oauthTokenExpiresIn;
-
-    /**
-     * Timestamp of the latest OAuth token generation
-     * @since 1.1.0
-     * */
-    private volatile long oauthTokenGeneratedTimestamp;
+    private ReentrantLock dataCollectorOperationsLock = new ReentrantLock();
 
     /**
      *
      * */
-    private ReentrantLock dataCollectorOperationsLock = new ReentrantLock();
+    private ReentrantLock authorizationLock = new ReentrantLock();
 
     /**
      * List of the latest errors (not critical that do not cancel out general devices processing mechanism)
@@ -1052,6 +1063,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (!interceptors.contains(zoomRoomsHeaderInterceptor))
             interceptors.add(zoomRoomsHeaderInterceptor);
 
+        final HttpClient httpClient = HttpClients.custom()
+                .setDefaultRequestConfig(RequestConfig.custom()
+                        .setCookieSpec(CookieSpecs.STANDARD).build())
+                .build();
+
+        restTemplate.setRequestFactory(
+                new HttpComponentsClientHttpRequestFactory(httpClient)
+        );
         return restTemplate;
     }
 
@@ -1062,7 +1081,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     protected void authenticate() throws Exception {
-        disconnect();
         generateAccessToken();
     }
 
@@ -2323,6 +2341,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @since 1.1.0
      * */
     private void generateAccessToken() throws Exception {
+        if (logger.isDebugEnabled()) {
+            logger.debug("Generating new access token.");
+        }
         if (StringUtils.isNullOrEmpty(accountId)) {
             String message = "Unable to log in using OAuth: no accountId provided";
             knownErrors.put(LOGIN_ERROR_KEY, message);
@@ -2364,8 +2385,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             throw new FailedLoginException(message);
         }
         oAuthAccessToken = oauthResponseData.get("AccessToken");
-        oauthTokenExpiresIn = Integer.parseInt(oauthResponseData.get("ExpiresIn")) * 1000L;
-        oauthTokenGeneratedTimestamp = System.currentTimeMillis();
         knownErrors.remove(LOGIN_ERROR_KEY);
     }
 
