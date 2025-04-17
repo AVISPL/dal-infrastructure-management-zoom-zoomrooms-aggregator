@@ -242,6 +242,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     class ZoomRoomsHeaderInterceptor implements ClientHttpRequestInterceptor {
         @Override
         public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
+            logger.debug("Request interception: " + request.getURI().getPath());
             ClientHttpResponse response = null;
             try {
                 response = execution.execute(request, body);
@@ -253,8 +254,16 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
                     }
                 }
-
-                if (HttpStatus.UNAUTHORIZED.equals(response.getStatusCode())) {
+                boolean unauthorizedError = false;
+                try {
+                    HttpStatusCode status = response.getStatusCode();
+                    unauthorizedError = status.value() == HttpStatus.UNAUTHORIZED.value();
+                } catch (NoSuchMethodError nsme) {
+                    logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
+                    int code = response.getRawStatusCode();
+                    unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
+                }
+                if (unauthorizedError) {
                     if (authorizationLock.isLocked()) {
                         if (logger.isDebugEnabled()) {
                             logger.debug(String.format("Invalid authentication token detected, re-authorization is in progress. Scheduling retry for %s. Current number of devices in cache: %s", path, aggregatedDevices.size()));
@@ -1185,6 +1194,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     public List<Statistics> getMultipleStatistics() throws Exception {
+        updateValidRetrieveStatisticsTimestamp();
         Map<String, String> statistics = new HashMap<>();
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
         Map<String, String> dynamicStatistics = new HashMap<>();
@@ -1349,10 +1359,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * {@inheritDoc}
      */
     @Override
-    public List<AggregatedDevice> retrieveMultipleStatistics() throws FailedLoginException {
-        logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, DataLoader running: %s, devicesExecutionPool: %s, dataLoader idle: %s", isInitialized(), executorService != null, deviceDataLoader.isInProgress(), devicesExecutionPool.size(), deviceDataLoader.isIdle()));
-
+    public List<AggregatedDevice> retrieveMultipleStatistics() {
+        logger.debug("ZoomRooms: Retrieve multiple statistics call");
         updateValidRetrieveStatisticsTimestamp();
+//        logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, DataLoader running: %s, devicesExecutionPool: %s, dataLoader idle: %s", isInitialized(), executorService != null, deviceDataLoader.isInProgress(), devicesExecutionPool.size(), deviceDataLoader.isIdle()));
         dataCollectorOperationsLock.lock();
         try {
             if (executorService == null) {
@@ -1403,7 +1413,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             // Need to call it here to still have all the operations running and make sure errors are checked.
             // Otherwise, the runner will consider device paused
             oAuthAccessToken = null;
-            throw new FailedLoginException(knownErrors.get(LOGIN_ERROR_KEY));
+            throw new RuntimeException(knownErrors.get(LOGIN_ERROR_KEY));
         }
         return new ArrayList<>(aggregatedDevices.values());
     }
