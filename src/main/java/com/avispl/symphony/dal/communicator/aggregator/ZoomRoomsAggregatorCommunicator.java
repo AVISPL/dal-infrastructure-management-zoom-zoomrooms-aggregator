@@ -25,15 +25,10 @@ import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.config.CookieSpecs;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.impl.client.HttpClients;
 import org.springframework.http.*;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -1109,14 +1104,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (!interceptors.contains(zoomRoomsHeaderInterceptor))
             interceptors.add(zoomRoomsHeaderInterceptor);
 
-        final HttpClient httpClient = HttpClients.custom()
-                .setDefaultRequestConfig(RequestConfig.custom()
-                        .setCookieSpec(CookieSpecs.STANDARD).build())
-                .build();
-
-        restTemplate.setRequestFactory(
-                new HttpComponentsClientHttpRequestFactory(httpClient)
-        );
         return restTemplate;
     }
 
