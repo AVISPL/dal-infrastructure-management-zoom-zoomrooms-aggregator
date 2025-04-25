@@ -1366,12 +1366,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         dataCollectorOperationsLock.lock();
         try {
             if (executorService == null) {
+                logger.warn("No executor service found, creating executor service.");
                 // Due to the bug that after changing properties on fly - the adapter is destroyed but adapter is not initialized properly,
                 // so executor service is not running. We need to make sure executorService exists
                 executorService = Executors.newFixedThreadPool(executorServiceThreadCount);
                 executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
                 serviceRunning = true;
             } else if (deviceDataLoader.isIdle()) {
+                logger.warn("DeviceDataLoader is in idle state, restarting.");
                 executorService.shutdownNow();
                 if (deviceDataLoader != null) {
                     deviceDataLoader.stop();
