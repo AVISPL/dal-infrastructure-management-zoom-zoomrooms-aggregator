@@ -6,7 +6,7 @@
 
     <groupId>com.avispl.symphony.dal.device.aggregator.zoom.rooms</groupId>
     <artifactId>symphony-dal-communicator-aggregator-zoom-rooms</artifactId>
-    <version>1.2.4</version>
+    <version>1.2.5</version>
     <properties>
         <symphonyApiVersion>RELEASE</symphonyApiVersion>
         <timestamp>${maven.build.timestamp}</timestamp>
@@ -173,19 +173,19 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-web</artifactId>
-            <version>5.2.25.RELEASE</version>
+            <version>6.2.1</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-expression</artifactId>
-            <version>5.2.25.RELEASE</version>
+            <version>6.2.1</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context-support</artifactId>
-            <version>5.2.25.RELEASE</version>
+            <version>6.2.1</version>
             <scope>provided</scope>
         </dependency>
         <dependency>

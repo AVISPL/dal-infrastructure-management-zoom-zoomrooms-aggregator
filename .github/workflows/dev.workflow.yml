@@ -19,7 +19,7 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: adopt
-        java-version: 8
+        java-version: 17
         overwrite-settings: false
     - id: date
       run: echo "date=$(date +'%y%m%d' | cut -c 2-)" >> $GITHUB_OUTPUT
@@ -44,7 +44,7 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: adopt
-        java-version: 8
+        java-version: 17
         overwrite-settings: false
     - name: Version set
       run: mvn versions:set versions:commit -DnewVersion=${{ needs.versiongenerate.outputs.version }}

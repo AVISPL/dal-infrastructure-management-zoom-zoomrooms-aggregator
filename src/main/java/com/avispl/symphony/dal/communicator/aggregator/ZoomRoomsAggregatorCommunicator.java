@@ -25,15 +25,10 @@ import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.config.CookieSpecs;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.impl.client.HttpClients;
 import org.springframework.http.*;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -78,9 +73,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     class ZoomRoomsDeviceDataLoader implements Runnable {
         private volatile boolean inProgress;
+        /**
+         * Timestamp of last data loader activity
+         * @since 1.2.5
+         * */
+        private volatile long lastActivityTimestamp;
 
         public ZoomRoomsDeviceDataLoader() {
             logDebugMessage("Creating new device data loader.");
+            lastActivityTimestamp = System.currentTimeMillis();
             inProgress = true;
         }
 
@@ -113,8 +114,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         knownErrors.clear();
                         fetchDevicesList();
                     } catch (Exception e) {
-                        knownErrors.put(ROOMS_LIST_RETRIEVAL_ERROR_KEY, limitErrorMessageByLength(e.getMessage(), maxErrorLength));
-                        logger.error("Error occurred during device list retrieval: " + e.getMessage() + " with cause: " + e.getCause().getMessage(), e);
+                        if (e != null) {
+                            knownErrors.put(ROOMS_LIST_RETRIEVAL_ERROR_KEY, limitErrorMessageByLength(e.getMessage(), maxErrorLength));
+                        }
+                        logger.error("Error occurred during device list retrieval.", e);
                     }
 
                     if (!inProgress) {
@@ -142,8 +145,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
                         retrieveZoomRoomMetrics();
                     } catch (Exception e) {
-                        knownErrors.put(ROOMS_METRICS_RETRIEVAL_ERROR_KEY, limitErrorMessageByLength(e.getMessage(), maxErrorLength));
-                        logger.error("Error occurred during ZoomRooms metrics retrieval: " + e.getMessage() + " with cause: " + e.getCause().getMessage());
+                        if (e != null) {
+                            knownErrors.put(ROOMS_METRICS_RETRIEVAL_ERROR_KEY, limitErrorMessageByLength(e.getMessage(), maxErrorLength));
+                        }
+                        logger.error("Error occurred during ZoomRooms metrics retrieval.", e);
                     }
 
                     for (AggregatedDevice aggregatedDevice : aggregatedDevices.values()) {
@@ -189,8 +194,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
                     lastMonitoringCycleDuration = (System.currentTimeMillis() - startCycle)/1000;
                     logDebugMessage("Finished collecting devices statistics cycle at " + new Date() + ", total duration: " + lastMonitoringCycleDuration);
-                } catch(Exception e) {
+                } catch(Throwable e) {
                     logger.error("Unexpected error occurred during main device collection cycle", e);
+                } finally {
+                    lastActivityTimestamp = System.currentTimeMillis();
                 }
             }
             logDebugMessage("Main device collection loop is completed, in progress marker: " + inProgress);
@@ -213,6 +220,16 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         public boolean isInProgress() {
             return inProgress;
         }
+
+        /**
+         * Retrieves dataLoader idle state (either the process )
+         * Idle state indicates that the data loader loop is currently inactive and must be reactivated
+         *
+         * @since 1.2.5
+         * */
+        public boolean isIdle() {
+            return System.currentTimeMillis() - lastActivityTimestamp > idleTimeout;
+        }
     }
 
     /**
@@ -225,6 +242,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     class ZoomRoomsHeaderInterceptor implements ClientHttpRequestInterceptor {
         @Override
         public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
+            logger.debug("Request interception: " + request.getURI().getPath());
             ClientHttpResponse response = null;
             try {
                 response = execution.execute(request, body);
@@ -236,8 +254,16 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
                     }
                 }
-
-                if (HttpStatus.UNAUTHORIZED.equals(response.getStatusCode())) {
+                boolean unauthorizedError = false;
+                try {
+                    HttpStatusCode status = response.getStatusCode();
+                    unauthorizedError = status.value() == HttpStatus.UNAUTHORIZED.value();
+                } catch (NoSuchMethodError nsme) {
+                    logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
+                    int code = response.getRawStatusCode();
+                    unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
+                }
+                if (unauthorizedError) {
                     if (authorizationLock.isLocked()) {
                         if (logger.isDebugEnabled()) {
                             logger.debug(String.format("Invalid authentication token detected, re-authorization is in progress. Scheduling retry for %s. Current number of devices in cache: %s", path, aggregatedDevices.size()));
@@ -393,6 +419,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @since 1.1.0
      * */
     private int maxErrorLength = 120;
+
+    /**
+     * timeout that indicates Data Loader being idle
+     * @since 1.2.5
+     * */
+    private int idleTimeout = 600000;
 
     /**
      * Account id to authorize in, when OAuth authentication type is used
@@ -612,6 +644,24 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Pool for keeping all the async operations in, to track any operations in progress and cancel them if needed
      */
     private List<Future> devicesExecutionPool = new ArrayList<>();
+
+    /**
+     * Retrieves {@link #idleTimeout}
+     *
+     * @return value of {@link #idleTimeout}
+     */
+    public int getIdleTimeout() {
+        return idleTimeout;
+    }
+
+    /**
+     * Sets {@link #idleTimeout} value
+     *
+     * @param idleTimeout new value of {@link #idleTimeout}
+     */
+    public void setIdleTimeout(int idleTimeout) {
+        this.idleTimeout = idleTimeout;
+    }
 
     /**
      * Retrieves {@link #includeRoomsMetrics}
@@ -1063,14 +1113,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (!interceptors.contains(zoomRoomsHeaderInterceptor))
             interceptors.add(zoomRoomsHeaderInterceptor);
 
-        final HttpClient httpClient = HttpClients.custom()
-                .setDefaultRequestConfig(RequestConfig.custom()
-                        .setCookieSpec(CookieSpecs.STANDARD).build())
-                .build();
-
-        restTemplate.setRequestFactory(
-                new HttpComponentsClientHttpRequestFactory(httpClient)
-        );
         return restTemplate;
     }
 
@@ -1152,6 +1194,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     @Override
     public List<Statistics> getMultipleStatistics() throws Exception {
+        updateValidRetrieveStatisticsTimestamp();
         Map<String, String> statistics = new HashMap<>();
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
         Map<String, String> dynamicStatistics = new HashMap<>();
@@ -1316,16 +1359,26 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * {@inheritDoc}
      */
     @Override
-    public List<AggregatedDevice> retrieveMultipleStatistics() throws FailedLoginException {
-        logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, serviceRunning: %s, devicesExecutionPool: %s", isInitialized(), executorService != null, serviceRunning, devicesExecutionPool.size()));
-
+    public List<AggregatedDevice> retrieveMultipleStatistics() {
+        logger.debug("ZoomRooms: Retrieve multiple statistics call");
         updateValidRetrieveStatisticsTimestamp();
+//        logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, DataLoader running: %s, devicesExecutionPool: %s, dataLoader idle: %s", isInitialized(), executorService != null, deviceDataLoader.isInProgress(), devicesExecutionPool.size(), deviceDataLoader.isIdle()));
         dataCollectorOperationsLock.lock();
         try {
             if (executorService == null) {
+                logger.warn("No executor service found, creating executor service.");
                 // Due to the bug that after changing properties on fly - the adapter is destroyed but adapter is not initialized properly,
                 // so executor service is not running. We need to make sure executorService exists
-                executorService = Executors.newFixedThreadPool(8);
+                executorService = Executors.newFixedThreadPool(executorServiceThreadCount);
+                executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
+                serviceRunning = true;
+            } else if (deviceDataLoader.isIdle()) {
+                logger.warn("DeviceDataLoader is in idle state, restarting.");
+                executorService.shutdownNow();
+                if (deviceDataLoader != null) {
+                    deviceDataLoader.stop();
+                }
+                executorService = Executors.newFixedThreadPool(executorServiceThreadCount);
                 executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
                 serviceRunning = true;
             }
@@ -1362,7 +1415,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             // Need to call it here to still have all the operations running and make sure errors are checked.
             // Otherwise, the runner will consider device paused
             oAuthAccessToken = null;
-            throw new FailedLoginException(knownErrors.get(LOGIN_ERROR_KEY));
+            throw new RuntimeException(knownErrors.get(LOGIN_ERROR_KEY));
         }
         return new ArrayList<>(aggregatedDevices.values());
     }
@@ -1807,6 +1860,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param inCall whether the device is in call or not
      * */
     private synchronized void setRoomInCall(AggregatedDevice aggregatedZoomRoomDevice, boolean inCall) {
+        if (!includeRoomsMetrics) {
+            logDebugMessage("includeRoomsMetrics configuration parameter is set to 'false', skipping Zoom Room inCall status update.");
+            return;
+        }
         List<Statistics> statistics = aggregatedZoomRoomDevice.getMonitoredStatistics();
 
         String roomId = aggregatedZoomRoomDevice.getDeviceId();
