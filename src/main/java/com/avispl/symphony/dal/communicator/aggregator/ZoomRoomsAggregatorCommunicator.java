@@ -75,11 +75,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     class ZoomRoomsDeviceDataLoader implements Runnable {
         private volatile boolean inProgress;
-        /**
-         * Timestamp of last data loader activity
-         * @since 1.2.5
-         * */
-        private volatile long lastActivityTimestamp;
 
         /**
          * Timestamp of last data loader activity
