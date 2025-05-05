@@ -25,10 +25,12 @@ import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.cookie.StandardCookieSpec;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.springframework.http.*;
-import org.springframework.http.client.ClientHttpRequestExecution;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
-import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.*;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -73,6 +75,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     class ZoomRoomsDeviceDataLoader implements Runnable {
         private volatile boolean inProgress;
+        /**
+         * Timestamp of last data loader activity
+         * @since 1.2.5
+         * */
+        private volatile long lastActivityTimestamp;
+
         /**
          * Timestamp of last data loader activity
          * @since 1.2.5
@@ -220,7 +228,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         public boolean isInProgress() {
             return inProgress;
         }
-
         /**
          * Retrieves dataLoader idle state (either the process )
          * Idle state indicates that the data loader loop is currently inactive and must be reactivated
@@ -256,12 +263,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 }
                 boolean unauthorizedError = false;
                 try {
-                    HttpStatusCode status = response.getStatusCode();
-                    unauthorizedError = status.value() == HttpStatus.UNAUTHORIZED.value();
-                } catch (NoSuchMethodError nsme) {
-                    logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
-                    int code = response.getRawStatusCode();
-                    unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
+                    logDebugMessage("Request interception in progress. Checking response code.");
+                    unauthorizedError = response.getStatusCode().value() == HttpStatus.UNAUTHORIZED.value();
+                } catch (Throwable nsme) {
+                    unauthorizedError = true;
                 }
                 if (unauthorizedError) {
                     if (authorizationLock.isLocked()) {
@@ -288,12 +293,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 }
                 return response;
             } catch (Exception e) {
-                //knownErrors.put(LOGIN_ERROR_KEY, e.getMessage());
+//                knownErrors.put(LOGIN_ERROR_KEY, e.getMessage());
+                oAuthAccessToken = null;
                 logger.error("An exception occurred during request execution", e);
+                throw e;
             }
-            return response;
-    }
         }
+    }
 
     private static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String BASE_ZOOM_URL = "v2";
@@ -422,9 +428,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * timeout that indicates Data Loader being idle
-     * @since 1.2.5
+     * @since 1.2.6
      * */
-    private int idleTimeout = 600000;
+    private int idleTimeout = 900000;
 
     /**
      * Account id to authorize in, when OAuth authentication type is used
@@ -1113,6 +1119,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (!interceptors.contains(zoomRoomsHeaderInterceptor))
             interceptors.add(zoomRoomsHeaderInterceptor);
 
+        final HttpClient httpClient = HttpClients.custom()
+                .setDefaultRequestConfig(RequestConfig.custom()
+                        .setCookieSpec(StandardCookieSpec.RELAXED).build())
+                .build();
+
+        restTemplate.setRequestFactory(
+                new HttpComponentsClientHttpRequestFactory(httpClient)
+        );
         return restTemplate;
     }
 
@@ -1195,6 +1209,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     @Override
     public List<Statistics> getMultipleStatistics() throws Exception {
         updateValidRetrieveStatisticsTimestamp();
+        if (StringUtils.isNullOrEmpty(oAuthAccessToken)) {
+            logDebugMessage("Unable to find oAuthAccessToken, regenerating.");
+            authorizationLock.lock();
+            try {
+                authenticate();
+            } finally {
+                authorizationLock.unlock();
+            }
+        }
         Map<String, String> statistics = new HashMap<>();
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
         Map<String, String> dynamicStatistics = new HashMap<>();
@@ -1359,8 +1382,18 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * {@inheritDoc}
      */
     @Override
-    public List<AggregatedDevice> retrieveMultipleStatistics() {
+    public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
         logger.debug("ZoomRooms: Retrieve multiple statistics call");
+        logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, DataLoader running: %s, devicesExecutionPool: %s, dataLoader idle: %s", isInitialized(), executorService != null, deviceDataLoader.isInProgress(), devicesExecutionPool.size(), deviceDataLoader.isIdle()));
+        if (StringUtils.isNullOrEmpty(oAuthAccessToken)) {
+            logDebugMessage("Unable to find oAuthAccessToken, regenerating.");
+            authorizationLock.lock();
+            try {
+                authenticate();
+            } finally {
+                authorizationLock.unlock();
+            }
+        }
         updateValidRetrieveStatisticsTimestamp();
 //        logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, DataLoader running: %s, devicesExecutionPool: %s, dataLoader idle: %s", isInitialized(), executorService != null, deviceDataLoader.isInProgress(), devicesExecutionPool.size(), deviceDataLoader.isIdle()));
         dataCollectorOperationsLock.lock();
@@ -1373,14 +1406,18 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
                 serviceRunning = true;
             } else if (deviceDataLoader.isIdle()) {
-                logger.warn("DeviceDataLoader is in idle state, restarting.");
-                executorService.shutdownNow();
-                if (deviceDataLoader != null) {
-                    deviceDataLoader.stop();
-                }
-                executorService = Executors.newFixedThreadPool(executorServiceThreadCount);
-                executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
-                serviceRunning = true;
+                logger.warn("DeviceDataLoader is in idle state.");
+                //TODO: uncomment this for 1.2.7
+//                logger.warn("DeviceDataLoader is in idle state, restarting.");
+//                if (!executorService.isShutdown()) {
+//                    executorService.shutdownNow();
+//                }
+//                if (deviceDataLoader != null) {
+//                    deviceDataLoader.stop();
+//                }
+//                executorService = Executors.newFixedThreadPool(executorServiceThreadCount);
+//                executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
+//                serviceRunning = true;
             }
         } finally {
             dataCollectorOperationsLock.unlock();
