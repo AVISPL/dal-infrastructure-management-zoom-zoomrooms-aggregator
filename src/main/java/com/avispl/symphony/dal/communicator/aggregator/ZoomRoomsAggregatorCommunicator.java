@@ -75,6 +75,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     class ZoomRoomsDeviceDataLoader implements Runnable {
         private volatile boolean inProgress;
+        /**
+         * Timestamp of last data loader activity
+         * @since 1.2.5
+         * */
+        private volatile long lastActivityTimestamp;
 
         /**
          * Timestamp of last data loader activity
@@ -244,6 +249,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     class ZoomRoomsHeaderInterceptor implements ClientHttpRequestInterceptor {
         @Override
         public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
+            logger.debug("Request interception: " + request.getURI().getPath());
             ClientHttpResponse response = null;
             try {
                 response = execution.execute(request, body);
@@ -255,7 +261,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
                     }
                 }
-
                 boolean unauthorizedError = false;
                 try {
                     logDebugMessage("Request interception in progress. Checking response code.");
@@ -1390,6 +1395,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
         }
         updateValidRetrieveStatisticsTimestamp();
+//        logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, DataLoader running: %s, devicesExecutionPool: %s, dataLoader idle: %s", isInitialized(), executorService != null, deviceDataLoader.isInProgress(), devicesExecutionPool.size(), deviceDataLoader.isIdle()));
         dataCollectorOperationsLock.lock();
         try {
             if (executorService == null) {
@@ -1891,6 +1897,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param inCall whether the device is in call or not
      * */
     private synchronized void setRoomInCall(AggregatedDevice aggregatedZoomRoomDevice, boolean inCall) {
+        if (!includeRoomsMetrics) {
+            logDebugMessage("includeRoomsMetrics configuration parameter is set to 'false', skipping Zoom Room inCall status update.");
+            return;
+        }
         List<Statistics> statistics = aggregatedZoomRoomDevice.getMonitoredStatistics();
 
         String roomId = aggregatedZoomRoomDevice.getDeviceId();
