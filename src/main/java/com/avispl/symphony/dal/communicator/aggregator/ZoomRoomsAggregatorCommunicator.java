@@ -25,10 +25,6 @@ import com.avispl.symphony.dal.util.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.hc.client5.http.classic.HttpClient;
-import org.apache.hc.client5.http.config.RequestConfig;
-import org.apache.hc.client5.http.cookie.StandardCookieSpec;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.springframework.http.*;
 import org.springframework.http.client.*;
 import org.springframework.util.CollectionUtils;
@@ -260,7 +256,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             try {
                 HttpStatusCode status = response.getStatusCode();
                 unauthorizedError = status.value() == HttpStatus.UNAUTHORIZED.value();
-            } catch (NoSuchMethodError nsme) {
+            } catch (Throwable nsme) {
                 logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
                 int code = response.getRawStatusCode();
                 unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
@@ -1109,15 +1105,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         List<ClientHttpRequestInterceptor> interceptors = restTemplate.getInterceptors();
         if (!interceptors.contains(zoomRoomsHeaderInterceptor))
             interceptors.add(zoomRoomsHeaderInterceptor);
-
-        final HttpClient httpClient = HttpClients.custom()
-                .setDefaultRequestConfig(RequestConfig.custom()
-                        .setCookieSpec(StandardCookieSpec.RELAXED).build())
-                .build();
-
-        restTemplate.setRequestFactory(
-                new HttpComponentsClientHttpRequestFactory(httpClient)
-        );
         return restTemplate;
     }
 
