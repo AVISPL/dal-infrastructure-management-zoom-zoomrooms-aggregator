@@ -244,56 +244,50 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
             logger.debug("Request interception: " + request.getURI().getPath());
             ClientHttpResponse response = null;
+            response = execution.execute(request, body);
+            String path = request.getURI().getPath();
+            if (path.contains("metrics")) {
+                logDebugMessage("Addressing metrics endpoint " + path);
+                List<String> headerData = response.getHeaders().get(RATE_LIMIT_REMAINING_HEADER);
+                if (headerData != null && !headerData.isEmpty()) {
+                    metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
+                }
+            }
+            boolean unauthorizedError = false;
             try {
-                response = execution.execute(request, body);
-                String path = request.getURI().getPath();
-                if (path.contains("metrics")) {
-                    logDebugMessage("Addressing metrics endpoint " + path);
-                    List<String> headerData = response.getHeaders().get(RATE_LIMIT_REMAINING_HEADER);
-                    if (headerData != null && !headerData.isEmpty()) {
-                        metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
+                HttpStatusCode status = response.getStatusCode();
+                unauthorizedError = status.value() == HttpStatus.UNAUTHORIZED.value();
+            } catch (NoSuchMethodError nsme) {
+                logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
+                int code = response.getRawStatusCode();
+                unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
+            }
+            if (unauthorizedError) {
+                if (authorizationLock.isLocked()) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug(String.format("Invalid authentication token detected, re-authorization is in progress. Scheduling retry for %s. Current number of devices in cache: %s", path, aggregatedDevices.size()));
                     }
+                    // Authorization is already in progress, so we can just end the following unauthorized request here and it will be retried
+                    return response;
                 }
-                boolean unauthorizedError = false;
+                authorizationLock.lock();
                 try {
-                    HttpStatusCode status = response.getStatusCode();
-                    unauthorizedError = status.value() == HttpStatus.UNAUTHORIZED.value();
-                } catch (NoSuchMethodError nsme) {
-                    logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
-                    int code = response.getRawStatusCode();
-                    unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
-                }
-                if (unauthorizedError) {
-                    if (authorizationLock.isLocked()) {
-                        if (logger.isDebugEnabled()) {
-                            logger.debug(String.format("Invalid authentication token detected, re-authorization is in progress. Scheduling retry for %s. Current number of devices in cache: %s", path, aggregatedDevices.size()));
-                        }
-                        // Authorization is already in progress, so we can just end the following unauthorized request here and it will be retried
-                        return response;
+                    if (logger.isDebugEnabled()) {
+                        logger.debug(String.format("Authentication token is expired or missing, re-authorizing for request %s. Current number of devices in cache: %s.", path, aggregatedDevices.size()));
                     }
-                    authorizationLock.lock();
-                    try {
-                        if (logger.isDebugEnabled()) {
-                            logger.debug(String.format("Authentication token is expired or missing, re-authorizing for request %s. Current number of devices in cache: %s.", path, aggregatedDevices.size()));
-                        }
-                        authenticate();
-                        HttpHeaders headers = request.getHeaders();
-                        headers.put("Authorization", Collections.singletonList("Bearer " + oAuthAccessToken));
-                        response = execution.execute(request, body);
-                    } catch (Exception e) {
-                        logger.error("Unable to log in using OAuth.", e);
-                    } finally {
-                        authorizationLock.unlock();
-                    }
+                    authenticate();
+                    HttpHeaders headers = request.getHeaders();
+                    headers.put("Authorization", Collections.singletonList("Bearer " + oAuthAccessToken));
+                    response = execution.execute(request, body);
+                } catch (Exception e) {
+                    logger.error("Unable to log in using OAuth.", e);
+                } finally {
+                    authorizationLock.unlock();
                 }
-                return response;
-            } catch (Exception e) {
-                //knownErrors.put(LOGIN_ERROR_KEY, e.getMessage());
-                logger.error("An exception occurred during request execution", e);
             }
             return response;
-    }
         }
+    }
 
     private static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String BASE_ZOOM_URL = "v2";
@@ -1697,6 +1691,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         while (retryAttempts++ < 10 && serviceRunning) {
             try {
                 return doGet(url, JsonNode.class);
+            } catch (IllegalStateException ise) {
+                lastError = ise;
+                logger.error("IllegalStateException during executing doGet RestCommunicator request, resetting the connection.", ise);
+                disconnect();
+                connect();
             } catch (CommandFailureException e) {
                 //TODO propagate 429 on top, so API Error is reported? (make optional)
                 lastError = e;
