@@ -163,8 +163,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         devicesExecutionPool.add(executorService.submit(() -> {
                             String deviceId = aggregatedDevice.getDeviceId();
                             try {
+                                String internalId = aggregatedDevices.entrySet().stream().filter(deviceEntry -> deviceEntry.getKey().endsWith(deviceId)).findFirst().map(Map.Entry::getKey).get();
                                 // We need to only work with rooms here
-                                if (!deviceId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
+                                if (!internalId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
                                     populateDeviceDetails(deviceId);
                                 }
                                 knownErrors.remove(deviceId);
@@ -1386,7 +1387,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         nextDevicesCollectionIterationTimestamp = currentTimestamp;
         logDebugMessage("Zoom Rooms Collected Devices: " + aggregatedDevices.values());
 
-        for (AggregatedDevice aggregatedDevice: aggregatedDevices.values()) {
+        for (Map.Entry<String, AggregatedDevice> deviceEntry: aggregatedDevices.entrySet()) {
+            String deviceKey = deviceEntry.getKey();
+            if (deviceKey.startsWith(ROOM_DEVICE_ID_PREFIX)) {
+                continue;
+            }
+            AggregatedDevice aggregatedDevice = deviceEntry.getValue();
             aggregatedDevice.setTimestamp(currentTimestamp);
             logDebugMessage("Updating Zoom Room Devices InCall Status");
 
@@ -1395,7 +1401,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             try {
                 logDebugMessage(String.format("Updating %s device call status to %s", aggregatedDevice.getDeviceId(), callStatus));
                 setRoomInCall(aggregatedDevice, callStatus);
-
                 Boolean deviceOnline = aggregatedDevice.getDeviceOnline();
                 if (!deviceOnline) {
                     properties.put(METRICS_DATA_DEVICE_UPTIME, "ZR Offline");
@@ -1589,7 +1594,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
-     *
+     * Apply parent device (Zoom Rooms) endpoint statistics to a child (Zoom Room Device) device.
+     * @param parentDevice source device
+     * @param childDevice destination device
      * */
     private void applyParentEndpointStatisticsToDevice(AggregatedDevice parentDevice, AggregatedDevice childDevice) {
         if (parentDevice != null) {
