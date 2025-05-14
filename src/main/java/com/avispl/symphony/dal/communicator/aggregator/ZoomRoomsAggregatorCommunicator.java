@@ -26,9 +26,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.http.*;
-import org.springframework.http.client.ClientHttpRequestExecution;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
-import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.*;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -73,6 +71,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      */
     class ZoomRoomsDeviceDataLoader implements Runnable {
         private volatile boolean inProgress;
+
         /**
          * Timestamp of last data loader activity
          * @since 1.2.5
@@ -163,8 +162,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         devicesExecutionPool.add(executorService.submit(() -> {
                             String deviceId = aggregatedDevice.getDeviceId();
                             try {
+                                String internalId = aggregatedDevices.entrySet().stream().filter(deviceEntry -> deviceEntry.getKey().endsWith(deviceId)).findFirst().map(Map.Entry::getKey).get();
                                 // We need to only work with rooms here
-                                if (!deviceId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
+                                if (!internalId.startsWith(ROOM_DEVICE_ID_PREFIX)) {
                                     populateDeviceDetails(deviceId);
                                 }
                                 knownErrors.remove(deviceId);
@@ -220,7 +220,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         public boolean isInProgress() {
             return inProgress;
         }
-
         /**
          * Retrieves dataLoader idle state (either the process )
          * Idle state indicates that the data loader loop is currently inactive and must be reactivated
@@ -244,56 +243,50 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
             logger.debug("Request interception: " + request.getURI().getPath());
             ClientHttpResponse response = null;
+            response = execution.execute(request, body);
+            String path = request.getURI().getPath();
+            if (path.contains("metrics")) {
+                logDebugMessage("Addressing metrics endpoint " + path);
+                List<String> headerData = response.getHeaders().get(RATE_LIMIT_REMAINING_HEADER);
+                if (headerData != null && !headerData.isEmpty()) {
+                    metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
+                }
+            }
+            boolean unauthorizedError = false;
             try {
-                response = execution.execute(request, body);
-                String path = request.getURI().getPath();
-                if (path.contains("metrics")) {
-                    logDebugMessage("Addressing metrics endpoint " + path);
-                    List<String> headerData = response.getHeaders().get(RATE_LIMIT_REMAINING_HEADER);
-                    if (headerData != null && !headerData.isEmpty()) {
-                        metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
+                HttpStatusCode status = response.getStatusCode();
+                unauthorizedError = status.value() == HttpStatus.UNAUTHORIZED.value();
+            } catch (Throwable nsme) {
+                logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
+                int code = response.getRawStatusCode();
+                unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
+            }
+            if (unauthorizedError) {
+                if (authorizationLock.isLocked()) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug(String.format("Invalid authentication token detected, re-authorization is in progress. Scheduling retry for %s. Current number of devices in cache: %s", path, aggregatedDevices.size()));
                     }
+                    // Authorization is already in progress, so we can just end the following unauthorized request here and it will be retried
+                    return response;
                 }
-                boolean unauthorizedError = false;
+                authorizationLock.lock();
                 try {
-                    HttpStatusCode status = response.getStatusCode();
-                    unauthorizedError = status.value() == HttpStatus.UNAUTHORIZED.value();
-                } catch (NoSuchMethodError nsme) {
-                    logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
-                    int code = response.getRawStatusCode();
-                    unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
-                }
-                if (unauthorizedError) {
-                    if (authorizationLock.isLocked()) {
-                        if (logger.isDebugEnabled()) {
-                            logger.debug(String.format("Invalid authentication token detected, re-authorization is in progress. Scheduling retry for %s. Current number of devices in cache: %s", path, aggregatedDevices.size()));
-                        }
-                        // Authorization is already in progress, so we can just end the following unauthorized request here and it will be retried
-                        return response;
+                    if (logger.isDebugEnabled()) {
+                        logger.debug(String.format("Authentication token is expired or missing, re-authorizing for request %s. Current number of devices in cache: %s.", path, aggregatedDevices.size()));
                     }
-                    authorizationLock.lock();
-                    try {
-                        if (logger.isDebugEnabled()) {
-                            logger.debug(String.format("Authentication token is expired or missing, re-authorizing for request %s. Current number of devices in cache: %s.", path, aggregatedDevices.size()));
-                        }
-                        authenticate();
-                        HttpHeaders headers = request.getHeaders();
-                        headers.put("Authorization", Collections.singletonList("Bearer " + oAuthAccessToken));
-                        response = execution.execute(request, body);
-                    } catch (Exception e) {
-                        logger.error("Unable to log in using OAuth.", e);
-                    } finally {
-                        authorizationLock.unlock();
-                    }
+                    authenticate();
+                    HttpHeaders headers = request.getHeaders();
+                    headers.put("Authorization", Collections.singletonList("Bearer " + oAuthAccessToken));
+                    response = execution.execute(request, body);
+                } catch (Exception e) {
+                    logger.error("Unable to log in using OAuth.", e);
+                } finally {
+                    authorizationLock.unlock();
                 }
-                return response;
-            } catch (Exception e) {
-                //knownErrors.put(LOGIN_ERROR_KEY, e.getMessage());
-                logger.error("An exception occurred during request execution", e);
             }
             return response;
-    }
         }
+    }
 
     private static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String BASE_ZOOM_URL = "v2";
@@ -422,9 +415,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /**
      * timeout that indicates Data Loader being idle
-     * @since 1.2.5
+     * @since 1.2.6
      * */
-    private int idleTimeout = 600000;
+    private int idleTimeout = 900000;
 
     /**
      * Account id to authorize in, when OAuth authentication type is used
@@ -1112,7 +1105,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         List<ClientHttpRequestInterceptor> interceptors = restTemplate.getInterceptors();
         if (!interceptors.contains(zoomRoomsHeaderInterceptor))
             interceptors.add(zoomRoomsHeaderInterceptor);
-
         return restTemplate;
     }
 
@@ -1195,6 +1187,15 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     @Override
     public List<Statistics> getMultipleStatistics() throws Exception {
         updateValidRetrieveStatisticsTimestamp();
+        if (StringUtils.isNullOrEmpty(oAuthAccessToken)) {
+            logDebugMessage("Unable to find oAuthAccessToken, regenerating.");
+            authorizationLock.lock();
+            try {
+                authenticate();
+            } finally {
+                authorizationLock.unlock();
+            }
+        }
         Map<String, String> statistics = new HashMap<>();
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
         Map<String, String> dynamicStatistics = new HashMap<>();
@@ -1359,8 +1360,18 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * {@inheritDoc}
      */
     @Override
-    public List<AggregatedDevice> retrieveMultipleStatistics() {
+    public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
         logger.debug("ZoomRooms: Retrieve multiple statistics call");
+        logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, DataLoader running: %s, devicesExecutionPool: %s, dataLoader idle: %s", isInitialized(), executorService != null, deviceDataLoader.isInProgress(), devicesExecutionPool.size(), deviceDataLoader.isIdle()));
+        if (StringUtils.isNullOrEmpty(oAuthAccessToken)) {
+            logDebugMessage("Unable to find oAuthAccessToken, regenerating.");
+            authorizationLock.lock();
+            try {
+                authenticate();
+            } finally {
+                authorizationLock.unlock();
+            }
+        }
         updateValidRetrieveStatisticsTimestamp();
 //        logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, DataLoader running: %s, devicesExecutionPool: %s, dataLoader idle: %s", isInitialized(), executorService != null, deviceDataLoader.isInProgress(), devicesExecutionPool.size(), deviceDataLoader.isIdle()));
         dataCollectorOperationsLock.lock();
@@ -1373,14 +1384,18 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
                 serviceRunning = true;
             } else if (deviceDataLoader.isIdle()) {
-                logger.warn("DeviceDataLoader is in idle state, restarting.");
-                executorService.shutdownNow();
-                if (deviceDataLoader != null) {
-                    deviceDataLoader.stop();
-                }
-                executorService = Executors.newFixedThreadPool(executorServiceThreadCount);
-                executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
-                serviceRunning = true;
+                logger.warn("DeviceDataLoader is in idle state.");
+                //TODO: uncomment this for 1.2.7
+//                logger.warn("DeviceDataLoader is in idle state, restarting.");
+//                if (!executorService.isShutdown()) {
+//                    executorService.shutdownNow();
+//                }
+//                if (deviceDataLoader != null) {
+//                    deviceDataLoader.stop();
+//                }
+//                executorService = Executors.newFixedThreadPool(executorServiceThreadCount);
+//                executorService.submit(deviceDataLoader = new ZoomRoomsDeviceDataLoader());
+//                serviceRunning = true;
             }
         } finally {
             dataCollectorOperationsLock.unlock();
@@ -1392,7 +1407,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         nextDevicesCollectionIterationTimestamp = currentTimestamp;
         logDebugMessage("Zoom Rooms Collected Devices: " + aggregatedDevices.values());
 
-        for (AggregatedDevice aggregatedDevice: aggregatedDevices.values()) {
+        for (Map.Entry<String, AggregatedDevice> deviceEntry: aggregatedDevices.entrySet()) {
+            String deviceKey = deviceEntry.getKey();
+            if (deviceKey.startsWith(ROOM_DEVICE_ID_PREFIX)) {
+                continue;
+            }
+            AggregatedDevice aggregatedDevice = deviceEntry.getValue();
             aggregatedDevice.setTimestamp(currentTimestamp);
             logDebugMessage("Updating Zoom Room Devices InCall Status");
 
@@ -1401,7 +1421,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             try {
                 logDebugMessage(String.format("Updating %s device call status to %s", aggregatedDevice.getDeviceId(), callStatus));
                 setRoomInCall(aggregatedDevice, callStatus);
-
                 Boolean deviceOnline = aggregatedDevice.getDeviceOnline();
                 if (!deviceOnline) {
                     properties.put(METRICS_DATA_DEVICE_UPTIME, "ZR Offline");
@@ -1595,7 +1614,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
-     *
+     * Apply parent device (Zoom Rooms) endpoint statistics to a child (Zoom Room Device) device.
+     * @param parentDevice source device
+     * @param childDevice destination device
      * */
     private void applyParentEndpointStatisticsToDevice(AggregatedDevice parentDevice, AggregatedDevice childDevice) {
         if (parentDevice != null) {
@@ -1697,6 +1718,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         while (retryAttempts++ < 10 && serviceRunning) {
             try {
                 return doGet(url, JsonNode.class);
+            } catch (IllegalStateException ise) {
+                lastError = ise;
+                logger.error("IllegalStateException during executing doGet RestCommunicator request, resetting the connection.", ise);
+                disconnect();
+                connect();
             } catch (CommandFailureException e) {
                 //TODO propagate 429 on top, so API Error is reported? (make optional)
                 lastError = e;
