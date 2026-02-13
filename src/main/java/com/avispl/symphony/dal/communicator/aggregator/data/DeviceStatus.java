@@ -21,7 +21,7 @@ public enum DeviceStatus {
      * */
     private String value;
 
-    private DeviceStatus(final String value) {
+    DeviceStatus(final String value) {
         this.value = value;
     }
 
@@ -40,8 +40,8 @@ public enum DeviceStatus {
      * @return DeviceStatus instance
      * */
     public static DeviceStatus ofString(String value) {
-        Optional<DeviceStatus> selectedAuthMode = Arrays.stream(DeviceStatus.values()).filter(roomStatus -> Objects.equals(value, roomStatus.value)).findFirst();
-        return selectedAuthMode.orElse(DeviceStatus.OFFLINE);
+        Optional<DeviceStatus> selectedAuthMode = Arrays.stream(values()).filter(roomStatus -> Objects.equals(value, roomStatus.value)).findFirst();
+        return selectedAuthMode.orElse(OFFLINE);
     }
 
     /**
@@ -52,7 +52,7 @@ public enum DeviceStatus {
      * */
     public static boolean isOnline(String value) {
         DeviceStatus status = ofString(value);
-        return DeviceStatus.OFFLINE != status && DeviceStatus.UNDER_CONSTRUCTION != status;
+        return OFFLINE != status && UNDER_CONSTRUCTION != status;
     }
 
     /**
@@ -63,6 +63,6 @@ public enum DeviceStatus {
      * */
     public static boolean isInCall(String value) {
         DeviceStatus status = ofString(value);
-        return DeviceStatus.IN_MEETING == status;
+        return IN_MEETING == status;
     }
 }
