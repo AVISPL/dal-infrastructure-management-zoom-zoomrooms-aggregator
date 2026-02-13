@@ -108,7 +108,7 @@ public enum ZoomRoomsSetting {
     /* Stored name of the property, to use for control commands */
     private final String name;
 
-    private ZoomRoomsSetting(String s) {
+    ZoomRoomsSetting(String s) {
         name = s;
     }
 
