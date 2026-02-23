@@ -207,8 +207,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     // We don't want to fetch devices statuses too often, so by default it's currentTime + 60s
                     // otherwise - the variable is reset by the retrieveMultipleStatistics() call, which
                     // launches devices detailed statistics collection
-                    nextDevicesCollectionIterationTimestamp = System.currentTimeMillis() + (getMonitoringRate() * 60000L);
-
+                    try {
+                        nextDevicesCollectionIterationTimestamp = System.currentTimeMillis() + (getMonitoringRate() * 60000L);
+                    } catch (NoSuchMethodError nsme) {
+                        nextDevicesCollectionIterationTimestamp = System.currentTimeMillis() + 60000L;
+                        logger.warn("Unsupported feature: getMonitoringRate isn't available on current Cloud Connector version.", nsme);
+                    }
                     lastMonitoringCycleDuration = Math.max((System.currentTimeMillis() - startCycle) / 1000, 1L);
                     logDebugMessage("Finished collecting devices statistics cycle at " + new Date() + ", total duration: " + lastMonitoringCycleDuration);
                 } catch(Throwable e) {
@@ -1242,7 +1246,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         long adapterUptime = System.currentTimeMillis() - adapterInitializationTimestamp;
         statistics.put(PropertyNameConstants.ADAPTER_UPTIME_MIN, String.valueOf(adapterUptime / (1000 * 60)));
         statistics.put(PropertyNameConstants.ADAPTER_UPTIME, normalizeUptime(adapterUptime / 1000));
-        statistics.put(PropertyNameConstants.MONITORING_CYCLE_INTERVAL, String.valueOf(getMonitoringRate()));
+        try {
+            statistics.put(PropertyNameConstants.MONITORING_CYCLE_INTERVAL, String.valueOf(getMonitoringRate()));
+        } catch (NoSuchMethodError nsme) {
+            logger.warn("Unsupported feature: getMonitoringRate isn't available on current Cloud Connector version.", nsme);
+        }
         dynamicStatistics.put(PropertyNameConstants.MONITORING_CYCLE_DURATION, String.valueOf(lastMonitoringCycleDuration));
         dynamicStatistics.put(PropertyNameConstants.MONITORED_DEVICES_TOTAL, String.valueOf(aggregatedDevices.size()));
 
@@ -1376,7 +1384,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             dataCollectorOperationsLock.unlock();
         }
         logDebugMessage(String.format("Aggregator Multiple statistics requested. Aggregated Devices collected so far: %s. Runner thread running: %s. Executor terminated: %s",
-                    aggregatedDevices.size(), serviceRunning, executorService.isTerminated()));
+                aggregatedDevices.size(), serviceRunning, executorService.isTerminated()));
 
         long currentTimestamp = System.currentTimeMillis();
         nextDevicesCollectionIterationTimestamp = currentTimestamp;
@@ -1887,11 +1895,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (includeRoomDevicesInCalls) {
             aggregatedDevices.entrySet().stream().filter(deviceEntry -> deviceEntry.getKey().startsWith(ROOM_DEVICE_ID_PREFIX))
                     .map(Map.Entry::getValue).forEach(aggregatedDevice -> {
-                Map<String, String> deviceProperties = aggregatedDevice.getProperties();
-                if (deviceProperties != null && roomId.equals(deviceProperties.get("ZoomRoomId"))) {
-                    applyParentEndpointStatisticsToDevice(aggregatedZoomRoomDevice, aggregatedDevice);
-                }
-            });
+                        Map<String, String> deviceProperties = aggregatedDevice.getProperties();
+                        if (deviceProperties != null && roomId.equals(deviceProperties.get("ZoomRoomId"))) {
+                            applyParentEndpointStatisticsToDevice(aggregatedZoomRoomDevice, aggregatedDevice);
+                        }
+                    });
         }
     }
 
@@ -1943,7 +1951,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         Long dataRetrievalTimestamp = validRoomSettingsDataRetrievalPeriodTimestamps.get(roomId);
         long currentTimestamp = System.currentTimeMillis();
         long roomSettingsProperties = properties.keySet().stream()
-            .filter(s -> s.startsWith(PropertyNameConstants.ROOM_CONTROLS_ALERT_SETTINGS_GROUP) || s.startsWith(PropertyNameConstants.ROOM_CONTROLS_MEETING_SETTINGS_GROUP)).count();
+                .filter(s -> s.startsWith(PropertyNameConstants.ROOM_CONTROLS_ALERT_SETTINGS_GROUP) || s.startsWith(PropertyNameConstants.ROOM_CONTROLS_MEETING_SETTINGS_GROUP)).count();
         if (roomSettingsProperties > 0 && dataRetrievalTimestamp != null && dataRetrievalTimestamp > currentTimestamp) {
             logDebugMessage(String.format("Room settings retrieval is in cooldown. %s seconds left",
                     (dataRetrievalTimestamp - currentTimestamp) / 1000));
@@ -2074,7 +2082,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 properties.put(String.format(PropertyNameConstants.ROOM_DEVICES_TEMPLATE_PROPERTY, key, PropertyNameConstants.OFFLINE_APP_VERSIONS_PROPERTY), String.join("; ", offlineAppVersions));
                 properties.put(String.format(PropertyNameConstants.ROOM_DEVICES_TEMPLATE_PROPERTY, key, PropertyNameConstants.ONLINE_DEVICE_SYSTEMS_PROPERTY), String.join("; ", onlineDeviceSystems));
                 properties.put(String.format(PropertyNameConstants.ROOM_DEVICES_TEMPLATE_PROPERTY, key, PropertyNameConstants.OFFLINE_DEVICE_SYSTEMS_PROPERTY),
-                    String.join("; ", offlineDeviceSystems));
+                        String.join("; ", offlineDeviceSystems));
                 properties.put(String.format(PropertyNameConstants.ROOM_DEVICES_TEMPLATE_PROPERTY, key, PropertyNameConstants.ONLINE_DEVICES_TOTAL_PROPERTY), String.valueOf(onlineDevicesTotal));
                 properties.put(String.format(PropertyNameConstants.ROOM_DEVICES_TEMPLATE_PROPERTY, key, PropertyNameConstants.OFFLINE_DEVICES_TOTAL_PROPERTY), String.valueOf(offlineDevicesTotal));
             });
@@ -2098,7 +2106,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         Map<String, String> properties = aggregatedDevice.getProperties();
 
         advancedControllableProperties.stream().filter(advancedControllableProperty ->
-                advancedControllableProperty.getName().equals(propertyName)).findFirst()
+                        advancedControllableProperty.getName().equals(propertyName)).findFirst()
                 .ifPresent(advancedControllableProperty -> advancedControllableProperty.setValue(value));
         properties.put(propertyName, value);
 
@@ -2214,7 +2222,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (metricsRateLimitRemaining == null || metricsRateLimitRemaining < liveMeetingDetailsDailyRequestRateThreshold) {
             logDebugMessage(String.format("Skipping collection of meeting details for room %s. Remaining metrics rate limit: %s", roomId, metricsRateLimitRemaining));
             properties.put(PropertyNameConstants.LIVE_MEETING_GROUP_WARNING,
-                String.format("Daily request rate threshold of %s for the Meeting Dashboard API was reached.", liveMeetingDetailsDailyRequestRateThreshold));
+                    String.format("Daily request rate threshold of %s for the Meeting Dashboard API was reached.", liveMeetingDetailsDailyRequestRateThreshold));
             return;
         }
         if (!displayLiveMeetingDetails) {
