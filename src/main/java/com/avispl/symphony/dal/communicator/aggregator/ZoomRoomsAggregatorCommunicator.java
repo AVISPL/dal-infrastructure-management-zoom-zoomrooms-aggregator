@@ -1222,7 +1222,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
         List<AdvancedControllableProperty> accountSettingsControls = new ArrayList<>();
         if (displayAccountSettings) {
-            try {
+//            try {
                 JsonNode meetingSettings = retrieveAccountSettings("meeting");
                 if (meetingSettings != null) {
                     aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
@@ -1240,9 +1240,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     }
                     return false;
                 });
-            } catch (Exception e) {
-                logger.warn("Unable to retrieve account settings.", e);
-            }
+//            } catch (Exception e) {
+//                logger.warn("Unable to retrieve account settings.", e);
+//            }
         }
 
         statistics.put(PropertyNameConstants.ADAPTER_VERSION, adapterProperties.getProperty("mock.aggregator.version"));
