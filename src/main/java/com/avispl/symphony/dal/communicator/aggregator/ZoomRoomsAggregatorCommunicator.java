@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
+import com.avispl.symphony.dal.communicator.aggregator.data.Authorization;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpRequest;
@@ -297,7 +298,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     }
                     authenticate();
                     HttpHeaders headers = request.getHeaders();
-                    headers.put("Authorization", Collections.singletonList("Bearer " + oAuthAccessToken));
+                    headers.put("Authorization", Collections.singletonList("Bearer " + authorization.getAccessToken()));
                     response = execution.execute(request, body);
                 } catch (Exception e) {
                     logger.error("Unable to log in using OAuth.", e);
@@ -342,9 +343,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private AggregatedDeviceProcessor aggregatedDeviceProcessor;
 
     /**
-     * API Token (OAuth) used for authorization in Zoom API
+     * API authorization object used for authorization in Zoom API
      */
-    private volatile String oAuthAccessToken;
+    private volatile Authorization authorization;
 
     /**
      *
@@ -1206,7 +1207,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     @Override
     public List<Statistics> getMultipleStatistics() throws Exception {
         updateValidRetrieveStatisticsTimestamp();
-        if (StringUtils.isNullOrEmpty(oAuthAccessToken)) {
+        if (authorization == null || authorization.updateRequired()) {
             logDebugMessage("Unable to find oAuthAccessToken, regenerating.");
             authorizationLock.lock();
             try {
@@ -1296,7 +1297,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         logDebugMessage("Internal destroy is called.");
         try {
             serviceRunning = false;
-            oAuthAccessToken = null;
+            authorization = null;
             if (deviceDataLoader != null) {
                 deviceDataLoader.stop();
                 deviceDataLoader = null;
@@ -1338,7 +1339,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             logDebugMessage("Attempt to generate OAuth token with credentials: " + oauthPair);
             headers.add("Authorization", "Basic " + Base64.getEncoder().encodeToString(oauthPair.getBytes(StandardCharsets.UTF_8)));
         } else {
-            headers.add("Authorization", "Bearer " + oAuthAccessToken);
+            if (authorization == null) {
+                authenticate();
+            }
+            headers.add("Authorization", "Bearer " + authorization.getAccessToken());
         }
         return super.putExtraRequestHeaders(httpMethod, uri, headers);
     }
@@ -1350,7 +1354,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     public List<AggregatedDevice> retrieveMultipleStatistics() throws Exception {
         logger.debug("ZoomRooms: Retrieve multiple statistics call");
         logDebugMessage(String.format("Adapter initialized: %s, executorService exists: %s, DataLoader running: %s, devicesExecutionPool: %s, dataLoader idle: %s", isInitialized(), executorService != null, deviceDataLoader.isInProgress(), devicesExecutionPool.size(), deviceDataLoader.isIdle()));
-        if (StringUtils.isNullOrEmpty(oAuthAccessToken)) {
+        if (authorization == null || authorization.updateRequired()) {
             logDebugMessage("Unable to find oAuthAccessToken, regenerating.");
             authorizationLock.lock();
             try {
@@ -1420,7 +1424,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (knownErrors.containsKey(PropertyNameConstants.LOGIN_ERROR_KEY)) {
             // Need to call it here to still have all the operations running and make sure errors are checked.
             // Otherwise, the runner will consider device paused
-            oAuthAccessToken = null;
+            authorization = null;
             throw new RuntimeException(knownErrors.get(PropertyNameConstants.LOGIN_ERROR_KEY));
         }
         return new ArrayList<>(aggregatedDevices.values());
@@ -2431,9 +2435,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
         String requestUrl = String.format("%s://%s/%s", getProtocol(), zoomOAuthHostname, ZOOM_ROOM_OAUTH_URL + String.format(ZOOM_ROOM_OAUTH_PARAMS_URL, accountId));
         logDebugMessage("Attempting to generate access token with requestUrl " + requestUrl);
-        JsonNode response = null;
+        Authorization response;
         try {
-            response = doPost(requestUrl, null, JsonNode.class);
+            response = doPost(requestUrl, null, Authorization.class);
         } catch (Exception e) {
             String message = String.format("Authorization Failed (error %s) during %s request processing: ", e.getClass(), requestUrl) + e.getMessage();
             if (e instanceof CommandFailureException) {
@@ -2447,14 +2451,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             knownErrors.put(PropertyNameConstants.LOGIN_ERROR_KEY, message);
             throw new FailedLoginException(message);
         }
-        Map<String, String> oauthResponseData = new HashMap<>();
-        aggregatedDeviceProcessor.applyProperties(oauthResponseData, response, "OAuthResponse");
-        if (oauthResponseData.isEmpty() || !oauthResponseData.containsKey("AccessToken")) {
+        authorization = response;
+        if (StringUtils.isNullOrEmpty(authorization.getAccessToken())) {
             String message = String.format("Failed to retrieve an OAuth access token for account with id %s. Please check client data or OAuth application settings.", accountId);
             knownErrors.put(PropertyNameConstants.LOGIN_ERROR_KEY, message);
             throw new FailedLoginException(message);
         }
-        oAuthAccessToken = oauthResponseData.get("AccessToken");
         knownErrors.remove(PropertyNameConstants.LOGIN_ERROR_KEY);
     }
 
