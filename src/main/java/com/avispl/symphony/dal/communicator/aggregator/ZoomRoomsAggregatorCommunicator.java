@@ -1221,23 +1221,27 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
         List<AdvancedControllableProperty> accountSettingsControls = new ArrayList<>();
         if (displayAccountSettings) {
-            JsonNode meetingSettings = retrieveAccountSettings("meeting");
-            if (meetingSettings != null) {
-                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
-            }
-            JsonNode alertSettings = retrieveAccountSettings("alert");
-            if (alertSettings != null) {
-                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
-            }
-            // if the property isn't there - we should not display this control and its label
-            accountSettingsControls.removeIf(advancedControllableProperty -> {
-                String value = String.valueOf(advancedControllableProperty.getValue());
-                if (StringUtils.isNullOrEmpty(value)) {
-                    statistics.remove(advancedControllableProperty.getName());
-                    return true;
+            try {
+                JsonNode meetingSettings = retrieveAccountSettings("meeting");
+                if (meetingSettings != null) {
+                    aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
                 }
-                return false;
-            });
+                JsonNode alertSettings = retrieveAccountSettings("alert");
+                if (alertSettings != null) {
+                    aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
+                }
+                // if the property isn't there - we should not display this control and its label
+                accountSettingsControls.removeIf(advancedControllableProperty -> {
+                    String value = String.valueOf(advancedControllableProperty.getValue());
+                    if (StringUtils.isNullOrEmpty(value)) {
+                        statistics.remove(advancedControllableProperty.getName());
+                        return true;
+                    }
+                    return false;
+                });
+            } catch (Exception e) {
+                logger.warn("Unable to retrieve account settings.", e);
+            }
         }
 
         statistics.put(PropertyNameConstants.ADAPTER_VERSION, adapterProperties.getProperty("mock.aggregator.version"));
