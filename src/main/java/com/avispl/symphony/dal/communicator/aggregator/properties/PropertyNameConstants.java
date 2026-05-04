@@ -22,6 +22,9 @@ public class PropertyNameConstants {
     public static final String ADAPTER_BUILD_DATE = "AdapterBuildDate";
     /** @since 1.2.2 */
     public static final String ADAPTER_VERSION = "AdapterVersion";
+    public static final String MONITORING_CYCLE_DURATION = "LastMonitoringCycleDuration(sec)";
+    public static final String MONITORED_DEVICES_TOTAL = "MonitoredDevicesTotal";
+    public static final String MONITORING_CYCLE_INTERVAL = "MonitoringCycleInterval(min)";
     /** @since 1.0.1 */
     public static final String METRICS_DATA_RETRIEVED_TIME = "Metrics#DataRetrievedTime";
     /** @since 1.0.1 */
@@ -32,21 +35,15 @@ public class PropertyNameConstants {
     public static final String ACCOUNT_CONTROLS_MEETING_SETTINGS_GROUP = "AccountMeetingSettings#";
     public static final String ACCOUNT_CONTROLS_ALERT_SETTINGS_GROUP = "AccountMeetingSettings#";
 
-    public static final String LEAVE_CURRENT_MEETING_CONTROL = "RoomControls#LeaveCurrentMeeting";
     public static final String LEAVE_CURRENT_MEETING_PROPERTY = "LeaveCurrentMeeting";
-    public static final String END_CURRENT_MEETING_CONTROL = "RoomControls#EndCurrentMeeting";
     public static final String END_CURRENT_MEETING_PROPERTY = "EndCurrentMeeting";
-    public static final String RESTART_ZOOM_ROOMS_CLIENT_CONTROL = "RoomControls#RestartZoomRoomsClient";
-    public static final String START_ROOM_PMI_CONTROL = "RoomControls#StartRoomPersonalMeeting";
     public static final String START_ROOM_PMI_CONTROL_PROPERTY = "StartRoomPersonalMeeting";
 
-    public static final String ROOM_USER_DETAILS_PMI = "RoomUserDetails#PMI";
     public static final String ROOM_USER_DETAILS_GROUP = "RoomUserDetails#";
 
     public static final String LOCATION_NAME = "Location#Name";
     public static final String LOCATION_ID = "Location#ID";
 
-    public static final String LOCATION_ID_PROPERTY = "LocationId";
     public static final String DEVICE_TYPE_PROPERTY = "DeviceType";
     public static final String APP_VERSION_PROPERTY = "AppVersion";
     public static final String DEVICE_SYSTEM_PROPERTY = "DeviceSystem";
