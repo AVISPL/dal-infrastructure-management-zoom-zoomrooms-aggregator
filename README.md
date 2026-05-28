@@ -100,11 +100,11 @@ Aggregated Devices (including Zoom Rooms and Zoom Room Devices, includeRoomDevic
 
 If none of the recommended steps help, please enter an SOS ticket at {https://avi-spl.atlassian.net/servicedesk/customer/portals}
 
-## What Melody can do with it: 
+## What AI Assistant can do with it: 
 - Find Zoom Rooms Aggregated Devices (Zoom Aggregator as Monitoring Proxy)
 - Verify Zoom Rooms Aggregator configuration.
 
 Primarily, all devices that have device of type [Infrastructure|Management|Zoom|Zoom] set as Monitoring Proxy, are target Zoom Room devices.
 
-## What Melody cannot do with it: 
+## What AI Assistant cannot do with it: 
 - Provision the devices 
