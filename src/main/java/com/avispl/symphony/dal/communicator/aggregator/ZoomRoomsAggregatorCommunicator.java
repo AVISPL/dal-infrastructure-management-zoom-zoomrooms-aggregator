@@ -1573,8 +1573,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     }
 
                     device.setSerialNumber(serialNumber);
-                    device.setCategory(jsonNode.at(PropertyNameConstants.TYPE_PATH).asText());
                     device.setDeviceModel(jsonNode.at(PropertyNameConstants.MODEL_PATH).asText());
+
+                    String rawDeviceType = jsonNode.at(PropertyNameConstants.TYPE_PATH).asText();
+                    String rawDeviceManufacturer = jsonNode.at(PropertyNameConstants.MANUFACTURER_PATH).asText();
+                    applyDeviceFieldMapping(device, rawDeviceType, rawDeviceManufacturer);
+
                     device.setDeviceOnline(DeviceStatus.isOnline(jsonNode.at(PropertyNameConstants.STATUS_PATH).asText()));
                     List<String> macAddresses = new ArrayList<>();
                     for (JsonNode macAddress : jsonNode.at(PropertyNameConstants.MAC_ADDRESS_PATH)) {
@@ -1602,6 +1606,39 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
         });
         return collectedDeviceIds;
+    }
+
+    /**
+     * Applies Symphony catalog normalization to a room device's type, category, and make
+     * based on the raw device_type and device_model values returned by the Zoom API.
+     *
+     * @param device         the AggregatedDevice being populated
+     * @param rawDeviceType  value of /device_type from the Zoom API
+     * @param rawDeviceManufacturer value of /device_manufacturer from the Zoom API
+     */
+    private void applyDeviceFieldMapping(AggregatedDevice device, String rawDeviceType, String rawDeviceManufacturer) {
+        switch (rawDeviceType) {
+            case "Zoom Rooms Computer":
+                device.setType("Computer");
+                device.setCategory("Zoom Rooms");
+                break;
+            case "AV Controllers":
+                device.setType("AV Devices");
+                device.setCategory("AV Controllers");
+                break;
+            case "Scheduling Display":
+                if (rawDeviceManufacturer.equalsIgnoreCase("Crestron")) {
+                    device.setType("AV Devices");
+                    device.setCategory("Touch Screens");
+                    device.setDeviceMake("Crestron");
+                } else {
+                    device.setCategory(rawDeviceType);
+                }
+                break;
+            default:
+                device.setCategory(rawDeviceType);
+                break;
+        }
     }
 
     /**
