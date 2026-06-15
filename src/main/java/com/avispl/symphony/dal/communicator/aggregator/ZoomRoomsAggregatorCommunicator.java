@@ -1613,7 +1613,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * based on the raw device_type and device_model values returned by the Zoom API.
      *
      * @param device         the AggregatedDevice being populated
-     * @param rawDeviceType  value of /device_type from the Zoom API
+     * @param rawDeviceType  value of /device_type from the Zoom API (mapped to category)
      * @param rawDeviceManufacturer value of /device_manufacturer from the Zoom API
      */
     private void applyDeviceFieldMapping(AggregatedDevice device, String rawDeviceType, String rawDeviceManufacturer) {
@@ -1622,6 +1622,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 device.setType("Computer");
                 device.setCategory("Zoom Rooms");
                 break;
+            case "Controller":
             case "AV Controllers":
                 device.setType("AV Devices");
                 device.setCategory("AV Controllers");
