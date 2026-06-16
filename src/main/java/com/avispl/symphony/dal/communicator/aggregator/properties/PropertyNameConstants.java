@@ -94,7 +94,7 @@ public class PropertyNameConstants {
     public static final String TYPE_PATH = "/device_type";
     /** @since 1.2.0 */
     public static final String MODEL_PATH = "/device_model";
-    /** @since 1.2.0 */
+    /** @since 1.2.8 */
     public static final String MANUFACTURER_PATH = "/device_manufacturer";
     /** @since 1.2.0 */
     public static final String STATUS_PATH = "/status";
