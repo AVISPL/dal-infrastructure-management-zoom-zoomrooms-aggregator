@@ -1575,8 +1575,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     device.setSerialNumber(serialNumber);
                     device.setDeviceModel(jsonNode.at(PropertyNameConstants.MODEL_PATH).asText());
 
-                    String rawDeviceType = jsonNode.at(PropertyNameConstants.TYPE_PATH).asText();
-                    String rawDeviceManufacturer = jsonNode.at(PropertyNameConstants.MANUFACTURER_PATH).asText();
+                    String rawDeviceType = capitalizeFirst(jsonNode.at(PropertyNameConstants.TYPE_PATH).asText());
+                    String rawDeviceManufacturer = capitalizeFirst(jsonNode.at(PropertyNameConstants.MANUFACTURER_PATH).asText());
 
                     if (StringUtils.isNullOrEmpty(rawDeviceType)) {
                         rawDeviceType = "Computer";
@@ -1650,6 +1650,20 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
     }
 
+    /**
+     * Capitalize first letter
+     *
+     * @param s string to modify
+     * @return String result with capitalized 1st letter
+     * */
+    private String capitalizeFirst(String s) {
+        if (s == null || s.isEmpty()) {
+            return s;
+        }
+
+        return s.substring(0, 1).toUpperCase() + s.substring(1);
+    }
+    
     /**
      * Apply parent device (Zoom Rooms) endpoint statistics to a child (Zoom Room Device) device.
      * @param parentDevice source device
