@@ -1579,7 +1579,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     String rawDeviceManufacturer = jsonNode.at(PropertyNameConstants.MANUFACTURER_PATH).asText();
 
                     if (StringUtils.isNullOrEmpty(rawDeviceType)) {
-                        rawDeviceType = "AV Devices";
+                        rawDeviceType = "Computer";
                     }
                     if (StringUtils.isNullOrEmpty(rawDeviceManufacturer)) {
                         rawDeviceManufacturer = "Other";
