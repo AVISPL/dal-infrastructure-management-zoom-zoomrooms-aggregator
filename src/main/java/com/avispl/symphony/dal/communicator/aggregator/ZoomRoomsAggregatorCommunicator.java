@@ -1223,23 +1223,23 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         List<AdvancedControllableProperty> accountSettingsControls = new ArrayList<>();
         if (displayAccountSettings) {
 //            try {
-                JsonNode meetingSettings = retrieveAccountSettings("meeting");
-                if (meetingSettings != null) {
-                    aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
+            JsonNode meetingSettings = retrieveAccountSettings("meeting");
+            if (meetingSettings != null) {
+                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
+            }
+            JsonNode alertSettings = retrieveAccountSettings("alert");
+            if (alertSettings != null) {
+                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
+            }
+            // if the property isn't there - we should not display this control and its label
+            accountSettingsControls.removeIf(advancedControllableProperty -> {
+                String value = String.valueOf(advancedControllableProperty.getValue());
+                if (StringUtils.isNullOrEmpty(value)) {
+                    statistics.remove(advancedControllableProperty.getName());
+                    return true;
                 }
-                JsonNode alertSettings = retrieveAccountSettings("alert");
-                if (alertSettings != null) {
-                    aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
-                }
-                // if the property isn't there - we should not display this control and its label
-                accountSettingsControls.removeIf(advancedControllableProperty -> {
-                    String value = String.valueOf(advancedControllableProperty.getValue());
-                    if (StringUtils.isNullOrEmpty(value)) {
-                        statistics.remove(advancedControllableProperty.getName());
-                        return true;
-                    }
-                    return false;
-                });
+                return false;
+            });
 //            } catch (Exception e) {
 //                logger.warn("Unable to retrieve account settings.", e);
 //            }
@@ -1577,6 +1577,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
                     String rawDeviceType = jsonNode.at(PropertyNameConstants.TYPE_PATH).asText();
                     String rawDeviceManufacturer = jsonNode.at(PropertyNameConstants.MANUFACTURER_PATH).asText();
+
+                    if (StringUtils.isNullOrEmpty(rawDeviceType)) {
+                        rawDeviceType = "AV Devices";
+                    }
+                    if (StringUtils.isNullOrEmpty(rawDeviceManufacturer)) {
+                        rawDeviceManufacturer = "Other";
+                    }
                     applyDeviceFieldMapping(device, rawDeviceType, rawDeviceManufacturer);
 
                     device.setDeviceOnline(DeviceStatus.isOnline(jsonNode.at(PropertyNameConstants.STATUS_PATH).asText()));
@@ -1617,6 +1624,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param rawDeviceManufacturer value of /device_manufacturer from the Zoom API
      */
     private void applyDeviceFieldMapping(AggregatedDevice device, String rawDeviceType, String rawDeviceManufacturer) {
+        device.setDeviceMake(rawDeviceManufacturer);
+        device.setType(rawDeviceType);
         switch (rawDeviceType) {
             case "Zoom Rooms Computer":
                 device.setType("Computer");
@@ -1631,7 +1640,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 if (rawDeviceManufacturer.equalsIgnoreCase("Crestron")) {
                     device.setType("AV Devices");
                     device.setCategory("Touch Screens");
-                    device.setDeviceMake("Crestron");
                 } else {
                     device.setCategory(rawDeviceType);
                 }
