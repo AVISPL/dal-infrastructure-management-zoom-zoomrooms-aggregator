@@ -1655,6 +1655,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      *
      * @param s string to modify
      * @return String result with capitalized 1st letter
+     *
+     * @since 1.2.8
      * */
     private String capitalizeFirst(String s) {
         if (s == null || s.isEmpty()) {
