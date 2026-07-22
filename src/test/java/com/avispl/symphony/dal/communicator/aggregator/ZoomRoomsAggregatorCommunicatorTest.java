@@ -23,7 +23,60 @@ public class ZoomRoomsAggregatorCommunicatorTest {
         mockAggregatorCommunicator.setHost("");
         mockAggregatorCommunicator.setProtocol("");
         mockAggregatorCommunicator.setPort(443);
+        mockAggregatorCommunicator.setIncludeRoomDevices(true);
+        mockAggregatorCommunicator.setAccountId("");
+    }
 
+    @Test
+    public void deviceCatalogMappingTest() throws Exception {
+        mockAggregatorCommunicator.init();
+        mockAggregatorCommunicator.retrieveMultipleStatistics();
+        Thread.sleep(60000);
+        List<AggregatedDevice> devices = mockAggregatorCommunicator.retrieveMultipleStatistics();
+
+        Assert.assertFalse("No devices returned — background thread may not have completed", devices.isEmpty());
+
+        for (AggregatedDevice device : devices) {
+            // Only child room devices carry the "ZoomRoomId" property.
+            // Parent Zoom Rooms (built from model-mapping.yml) do not have it.
+            boolean isRoomDevice = device.getProperties() != null
+                    && device.getProperties().containsKey("ZoomRoomId");
+
+            if (!isRoomDevice) {
+                // Parent rooms: model-mapping.yml Generic model already sets these — verify untouched
+                Assert.assertEquals("Parent room type should be Computer: " + device.getDeviceName(),
+                        "Computer", device.getType());
+                Assert.assertEquals("Parent room category should be Zoom Rooms: " + device.getDeviceName(),
+                        "Zoom Rooms", device.getCategory());
+                continue;
+            }
+
+            String rawType = device.getProperties().get("DeviceType");
+            System.out.printf("Room device: %-50s | raw=%-30s | type=%-15s | category=%-20s | make=%s%n",
+                    device.getDeviceName(), rawType, device.getType(), device.getCategory(), device.getDeviceMake());
+
+            if ("Zoom Rooms Computer".equals(rawType)) {
+                Assert.assertEquals("Zoom Rooms Computer → type", "Computer", device.getType());
+                Assert.assertEquals("Zoom Rooms Computer → category", "Zoom Rooms", device.getCategory());
+
+            } else if ("Controller".equals(rawType)) {
+                Assert.assertEquals("AV Controllers → type", "AV Devices", device.getType());
+                Assert.assertEquals("AV Controllers → category", "AV Controllers", device.getCategory());
+
+            } else if ("Scheduling Display".equals(rawType)) {
+                String make = device.getDeviceMake();
+                if (make != null && make.startsWith("Crestron")) {
+                    Assert.assertEquals("Crestron Scheduling Display → type", "AV Devices", device.getType());
+                    Assert.assertEquals("Crestron Scheduling Display → category", "Touch Screens", device.getCategory());
+                    Assert.assertEquals("Crestron Scheduling Display → make", "Crestron", device.getDeviceMake());
+                }
+
+            } else {
+                // Any unmapped type: default branch in applyDeviceCatalogMapping sets category = rawType
+                Assert.assertEquals("Unmapped device type → category should equal raw device_type: " + device.getDeviceName(),
+                        rawType, device.getCategory());
+            }
+        }
     }
 
     @Test

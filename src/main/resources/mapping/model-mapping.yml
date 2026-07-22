@@ -5,13 +5,13 @@ models:
       node: rooms
       filter: get("room_id") != null
       mapping:
-        type: Computer
-        category: Zoom Rooms
+        type: "Computer"
+        category: "Zoom Rooms"
         serialNumber: get("id")
         deviceId: get("room_id")
         deviceName: get("name")
         deviceMake: "Other"
-        deviceModel: "Unknown"
+        deviceModel: "Generic PC Zoom Room"
         deviceOnline: get("status")?.asText()?.equals("Offline") != true
       properties:
         Metrics#RoomStatus: get("status")?.asText()?.replace(" ", "")
@@ -91,7 +91,7 @@ models:
         AccountAlertSettings#AudioMeetUsabilityThreshold: 'false'
         AccountAlertSettings#BatteryLowAndNotCharging: 'false'
         AccountAlertSettings#BatteryIsCharging: 'false'
-#        RoomControlsAlertSettings#BatteryPercentage: '0'
+        #        RoomControlsAlertSettings#BatteryPercentage: '0'
         AccountAlertSettings#ControllerSchedulingDisconnected: 'false'
         AccountAlertSettings#ControllerSchedulingReconnected: 'false'
         AccountAlertSettings#CpuUsageHighDetected: 'false'
@@ -149,9 +149,9 @@ models:
           value: get("notification")?.get("battery_is_charging")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-#        RoomControlsAlertSettings#BatteryPercentage:
-#          type: Numeric
-#          value: get("notification").get("battery_percentage")?.asInt()
+        #        RoomControlsAlertSettings#BatteryPercentage:
+        #          type: Numeric
+        #          value: get("notification").get("battery_percentage")?.asInt()
         AccountAlertSettings#ControllerSchedulingDisconnected:
           type: Switch
           value: get("notification")?.get("controller_scheduling_disconnected")?.asText()
@@ -220,7 +220,7 @@ models:
         RoomControlsAlertSettings#AudioMeetUsabilityThreshold: 'false'
         RoomControlsAlertSettings#BatteryLowAndNotCharging: 'false'
         RoomControlsAlertSettings#BatteryIsCharging: 'false'
-#        RoomControlsAlertSettings#BatteryPercentage: '0'
+        #        RoomControlsAlertSettings#BatteryPercentage: '0'
         RoomControlsAlertSettings#ControllerSchedulingDisconnected: 'false'
         RoomControlsAlertSettings#ControllerSchedulingReconnected: 'false'
         RoomControlsAlertSettings#CpuUsageHighDetected: 'false'
@@ -278,9 +278,9 @@ models:
           value: get("notification")?.get("battery_is_charging")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
-#        RoomControlsAlertSettings#BatteryPercentage:
-#          type: Text
-#          value: get("notification")?.get("battery_percentage")?.asText()
+        #        RoomControlsAlertSettings#BatteryPercentage:
+        #          type: Text
+        #          value: get("notification")?.get("battery_percentage")?.asText()
         RoomControlsAlertSettings#ControllerSchedulingDisconnected:
           type: Switch
           value: get("notification")?.get("controller_scheduling_disconnected")?.asText()
