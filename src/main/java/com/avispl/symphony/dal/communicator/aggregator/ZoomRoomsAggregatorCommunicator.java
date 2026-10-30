@@ -32,7 +32,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
@@ -269,20 +268,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             String path = request.getURI().getPath();
             if (path.contains("metrics")) {
                 logDebugMessage("Addressing metrics endpoint " + path);
-                List<String> headerData = response.getHeaders().get(RATE_LIMIT_REMAINING_HEADER);
-                if (headerData != null && !headerData.isEmpty()) {
-                    metricsRateLimitRemaining = Integer.parseInt(headerData.get(0));
+                // getFirst() instead of get(): HttpHeaders.get has different signatures in Spring 6 and 7
+                String headerData = response.getHeaders().getFirst(RATE_LIMIT_REMAINING_HEADER);
+                if (headerData != null) {
+                    metricsRateLimitRemaining = Integer.parseInt(headerData);
                 }
             }
-            boolean unauthorizedError = false;
-            try {
-                HttpStatusCode status = response.getStatusCode();
-                unauthorizedError = status.value() == HttpStatus.UNAUTHORIZED.value();
-            } catch (Throwable nsme) {
-                logger.warn("No springframework:6.x.x found in classpath, switching to deprecated getRawStatusCode() call for status code retrieval.");
-                int code = response.getStatusCode().value();
-                unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
-            }
+            boolean unauthorizedError = response.getStatusCode().value() == HttpStatus.UNAUTHORIZED.value();
             if (unauthorizedError) {
                 if (authorizationLock.isLocked()) {
                     if (logger.isDebugEnabled()) {
