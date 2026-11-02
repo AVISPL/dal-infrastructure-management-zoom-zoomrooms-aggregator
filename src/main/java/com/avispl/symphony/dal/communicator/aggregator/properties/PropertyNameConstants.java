@@ -33,7 +33,7 @@ public class PropertyNameConstants {
     public static final String ROOM_CONTROLS_MEETING_SETTINGS_GROUP = "RoomControlsMeetingSettings#";
     public static final String ROOM_CONTROLS_ALERT_SETTINGS_GROUP = "RoomControlsAlertSettings#";
     public static final String ACCOUNT_CONTROLS_MEETING_SETTINGS_GROUP = "AccountMeetingSettings#";
-    public static final String ACCOUNT_CONTROLS_ALERT_SETTINGS_GROUP = "AccountMeetingSettings#";
+    public static final String ACCOUNT_CONTROLS_ALERT_SETTINGS_GROUP = "AccountAlertSettings#";
 
     public static final String LEAVE_CURRENT_MEETING_PROPERTY = "LeaveCurrentMeeting";
     public static final String END_CURRENT_MEETING_PROPERTY = "EndCurrentMeeting";
