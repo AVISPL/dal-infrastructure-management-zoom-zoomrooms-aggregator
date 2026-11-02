@@ -318,7 +318,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String BASE_ZOOM_URL = "v2";
     private static final String ZOOM_ROOMS_URL = "rooms?page_size=%s";
-    private static final String ZOOM_ROOM_SETTINGS_URL = "/rooms/%s/settings"; // Requires room Id
+    private static final String ZOOM_ROOM_SETTINGS_URL = "rooms/%s/settings"; // Requires room Id
     private static final String ZOOM_ROOM_ACCOUNT_SETTINGS_URL = "rooms/account_settings";
     private static final String ZOOM_ROOMS_METRICS_URL = "metrics/zoomrooms?page_size=%s";
     private static final String ZOOM_ROOM_LOCATIONS_URL = "rooms/locations?page_size=%s";

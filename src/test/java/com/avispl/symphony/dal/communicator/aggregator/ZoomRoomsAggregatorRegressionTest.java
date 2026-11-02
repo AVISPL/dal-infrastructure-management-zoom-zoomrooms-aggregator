@@ -143,6 +143,47 @@ public class ZoomRoomsAggregatorRegressionTest {
     }
 
     /**
+     * Room settings are read and updated at rooms/{roomId}/settings, relative to the API base path like every other
+     * endpoint (no leading slash, which produced v2//rooms/...).
+     */
+    @Test
+    public void roomSettingsUrlsAreRelativeToTheApiBasePath() throws Exception {
+        List<String> requests = new CopyOnWriteArrayList<>();
+        ZoomRoomsAggregatorCommunicator communicator = new StubbedCommunicator() {
+            @Override
+            protected <Response> Response doGet(String url, Class<Response> responseClass) throws Exception {
+                requests.add("GET " + url);
+                return super.doGet(url, responseClass);
+            }
+
+            @Override
+            protected <Request, Response> Response doPatch(String url, Request request, Class<Response> responseClass) throws Exception {
+                requests.add("PATCH " + url);
+                return null;
+            }
+        };
+        communicator.setDisplayRoomSettings(true);
+        communicator.init();
+        try {
+            Method method = ZoomRoomsAggregatorCommunicator.class.getDeclaredMethod("populateRoomSettings", String.class, Map.class, List.class);
+            method.setAccessible(true);
+            method.invoke(communicator, ROOM_ID, new HashMap<String, String>(), new ArrayList<AdvancedControllableProperty>());
+            ControllableProperty controllableProperty = new ControllableProperty();
+            controllableProperty.setDeviceId(ROOM_ID);
+            controllableProperty.setProperty("RoomControlsMeetingSettings#UpcomingMeetingAlert");
+            controllableProperty.setValue(0);
+            communicator.controlProperty(controllableProperty);
+
+            Assertions.assertEquals(java.util.Arrays.asList(
+                    "GET rooms/" + ROOM_ID + "/settings?setting_type=meeting",
+                    "GET rooms/" + ROOM_ID + "/settings?setting_type=alert",
+                    "PATCH rooms/" + ROOM_ID + "/settings?setting_type=meeting"), requests);
+        } finally {
+            communicator.destroy();
+        }
+    }
+
+    /**
      * The statistics entry of an account settings switch holds the current value of the switch.
      */
     @Test
