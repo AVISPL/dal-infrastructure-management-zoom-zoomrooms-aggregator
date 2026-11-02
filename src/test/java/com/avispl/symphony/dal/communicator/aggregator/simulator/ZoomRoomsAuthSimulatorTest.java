@@ -24,13 +24,22 @@ public class ZoomRoomsAuthSimulatorTest extends ZoomRoomsSimulatorTestBase {
 
     private static final String TOKEN = "POST /oauth/token";
 
-    /** authFailure COUNT 1 on the token endpoint: one login error, then the adapter authenticates and recovers. */
+    /**
+     * authFailure on the token endpoint for an established adapter: a login error, then the adapter authenticates and
+     * recovers once the endpoint accepts the credentials again. The adapter reuses a valid token, so a short token
+     * lifetime makes it request a new one; while the rule is active every token request is rejected, so the call that
+     * needs the new token reports the login error whichever thread asked first.
+     */
     @Test
     public void tokenRejectedOnceRecoversOnTheNextCycle() throws Exception {
         generateFleet(2, 2);
+        patchState("{\"auth\": {\"tokenLifetimeSec\": 4}}");
         ZoomRoomsAggregatorCommunicator communicator = newCommunicator();
         List<AggregatedDevice> established = waitForFullCollection(communicator);
-        String ruleId = applyPreset("authFailure", TOKEN, "COUNT", 1);
+        patchState("{\"auth\": {\"tokenLifetimeSec\": 3600}}");
+        String ruleId = applyPreset("authFailure", TOKEN, "ALWAYS", null);
+        // the adapter renews a token once half of expires_in (3 s) has elapsed
+        Thread.sleep(2_000);
 
         Exception first = null;
         try {
@@ -38,8 +47,9 @@ public class ZoomRoomsAuthSimulatorTest extends ZoomRoomsSimulatorTestBase {
         } catch (Exception e) {
             first = e;
         }
-        Assertions.assertEquals(1, rule(ruleId).path("fired").asInt(), "the rejected token request happened");
+        Assertions.assertTrue(rule(ruleId).path("fired").asInt() >= 1, "the rejected token request happened");
         Assertions.assertTrue(first instanceof FailedLoginException, "rejected credentials reported as a login error: " + first);
+        removeRule(ruleId);
 
         ExtendedStatistics recovered = aggregatorStatistics(communicator);
         Assertions.assertFalse(recovered.getStatistics().containsKey("Errors#LoginError"), "login error cleared: " + recovered.getStatistics());
