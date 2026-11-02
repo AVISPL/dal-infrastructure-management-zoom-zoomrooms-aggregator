@@ -1239,6 +1239,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     statistics.remove(advancedControllableProperty.getName());
                     return true;
                 }
+                // the statistics entry holds the control's current value, the mapping only provides a placeholder
+                if (advancedControllableProperty.getValue() != null) {
+                    statistics.put(advancedControllableProperty.getName(), value);
+                }
                 return false;
             });
 //            } catch (Exception e) {
@@ -2071,6 +2075,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             if (StringUtils.isNullOrEmpty(value)) {
                 settingsProperties.remove(advancedControllableProperty.getName());
                 return true;
+            }
+            // the statistics entry holds the control's current value, the mapping only provides a placeholder
+            if (advancedControllableProperty.getValue() != null) {
+                settingsProperties.put(advancedControllableProperty.getName(), value);
             }
             return false;
         });
