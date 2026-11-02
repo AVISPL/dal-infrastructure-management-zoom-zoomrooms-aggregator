@@ -41,6 +41,7 @@ import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import javax.security.auth.login.FailedLoginException;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -314,14 +315,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String BASE_ZOOM_URL = "v2";
     private static final String ZOOM_ROOMS_URL = "rooms?page_size=%s";
-    private static final String ZOOM_DEVICES_URL = "rooms/%s/devices"; // Requires room Id
     private static final String ZOOM_ROOM_SETTINGS_URL = "/rooms/%s/settings"; // Requires room Id
     private static final String ZOOM_ROOM_ACCOUNT_SETTINGS_URL = "rooms/account_settings";
     private static final String ZOOM_ROOMS_METRICS_URL = "metrics/zoomrooms?page_size=%s";
     private static final String ZOOM_ROOM_LOCATIONS_URL = "rooms/locations?page_size=%s";
     private static final String ZOOM_USER_DETAILS_URL = "users/%s"; // Requires room user id
     private static final String ZOOM_ROOM_METRICS_DETAILS_URL = "metrics/zoomrooms/%s"; // Required room id
-    private static final String ZOOM_ROOM_DEVICES_URL = "rooms/%s/devices";
+    private static final String ZOOM_ROOM_DEVICES_URL = "rooms/%s/devices?page_size=%%s"; // Requires room Id, then page size
 
     /**
      * Room device id prefix, to separate room devices from rooms in {@link #aggregatedDevices} map
@@ -2203,11 +2203,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private JsonNode retrieveRoomDevices(String roomId) throws Exception {
-        JsonNode roomDevices = doGetWithRetry(String.format(ZOOM_DEVICES_URL, roomId));
-        if (roomDevices != null && roomDevices.has("devices")) {
-            return roomDevices.get("devices");
-        }
-        return null;
+        ArrayNode roomDevices = JsonNodeFactory.instance.arrayNode();
+        processPaginatedResponse(String.format(ZOOM_ROOM_DEVICES_URL, roomId), roomRequestPageSize, page -> {
+            if (page.has("devices")) {
+                roomDevices.addAll((ArrayNode) page.get("devices"));
+            }
+        });
+        return roomDevices.isEmpty() ? null : roomDevices;
     }
 
     /**
