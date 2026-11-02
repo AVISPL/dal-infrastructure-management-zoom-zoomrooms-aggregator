@@ -5,15 +5,25 @@ import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
 import com.avispl.symphony.api.dal.error.CommandFailureException;
+import com.avispl.symphony.dal.communicator.aggregator.data.Authorization;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.mock.http.client.MockClientHttpRequest;
+import org.springframework.mock.http.client.MockClientHttpResponse;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.URI;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -172,6 +182,71 @@ public class ZoomRoomsAggregatorRegressionTest {
         } finally {
             communicator.destroy();
         }
+    }
+
+    /**
+     * A request answered 401 while another request is re-authorizing waits for it and is retried with the renewed
+     * token, instead of returning the 401 unretried.
+     */
+    @Test
+    public void unauthorizedRequestDuringReauthorizationIsRetriedWithTheRenewedToken() throws Exception {
+        AtomicInteger tokenRequests = new AtomicInteger();
+        ZoomRoomsAggregatorCommunicator communicator = new StubbedCommunicator() {
+            @Override
+            protected <Request, Response> Response doPost(String url, Request request, Class<Response> responseClass) throws Exception {
+                tokenRequests.incrementAndGet();
+                return super.doPost(url, request, responseClass);
+            }
+        };
+        communicator.init();
+        try {
+            ReentrantLock lock = field(communicator, "authorizationLock");
+            ClientHttpRequestInterceptor interceptor = field(communicator, "zoomRoomsHeaderInterceptor");
+            Field authorizationField = ZoomRoomsAggregatorCommunicator.class.getDeclaredField("authorization");
+            authorizationField.setAccessible(true);
+
+            // another request holds the lock and renews the token
+            CountDownLatch locked = new CountDownLatch(1);
+            Thread reauthorizing = new Thread(() -> {
+                lock.lock();
+                try {
+                    locked.countDown();
+                    Thread.sleep(300);
+                    authorizationField.set(communicator, JSON.readValue("{\"access_token\": \"renewed\", \"expires_in\": 3599}", Authorization.class));
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                } finally {
+                    lock.unlock();
+                }
+            });
+            reauthorizing.start();
+            locked.await();
+
+            MockClientHttpRequest request = new MockClientHttpRequest(HttpMethod.GET, URI.create("https://api.zoom.us/v2/rooms"));
+            request.getHeaders().set("Authorization", "Bearer expired");
+            List<String> sentTokens = new CopyOnWriteArrayList<>();
+            ClientHttpResponse response = interceptor.intercept(request, new byte[0], (sent, body) -> {
+                String token = sent.getHeaders().getFirst("Authorization");
+                sentTokens.add(token);
+                return "Bearer renewed".equals(token)
+                        ? new MockClientHttpResponse(new byte[0], HttpStatus.OK)
+                        : new MockClientHttpResponse(new byte[0], HttpStatus.UNAUTHORIZED);
+            });
+            reauthorizing.join();
+
+            Assertions.assertEquals(200, response.getStatusCode().value(), "tokens sent: " + sentTokens);
+            Assertions.assertEquals(java.util.Arrays.asList("Bearer expired", "Bearer renewed"), sentTokens);
+            Assertions.assertEquals(0, tokenRequests.get(), "no second re-authorization for a token another request renewed");
+        } finally {
+            communicator.destroy();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T field(ZoomRoomsAggregatorCommunicator communicator, String name) throws Exception {
+        Field field = ZoomRoomsAggregatorCommunicator.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return (T) field.get(communicator);
     }
 
     private static void assertStatisticsMatchControls(Map<String, String> statistics, List<AdvancedControllableProperty> controls) {

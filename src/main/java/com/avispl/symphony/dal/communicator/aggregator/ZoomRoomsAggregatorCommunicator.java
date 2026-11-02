@@ -286,19 +286,22 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 unauthorizedError = code == HttpStatus.UNAUTHORIZED.value();
             }
             if (unauthorizedError) {
-                if (authorizationLock.isLocked()) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(String.format("Invalid authentication token detected, re-authorization is in progress. Scheduling retry for %s. Current number of devices in cache: %s", path, aggregatedDevices.size()));
-                    }
-                    // Authorization is already in progress, so we can just end the following unauthorized request here and it will be retried
+                if (authorizationLock.isHeldByCurrentThread()) {
+                    // The request was made while this thread is authorizing, so it can't re-authorize again
                     return response;
                 }
+                String failedAuthorization = request.getHeaders().getFirst("Authorization");
+                // Waits while another request re-authorizes, then retries with the renewed token
                 authorizationLock.lock();
                 try {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(String.format("Authentication token is expired or missing, re-authorizing for request %s. Current number of devices in cache: %s.", path, aggregatedDevices.size()));
+                    if (authorization == null || Objects.equals(failedAuthorization, "Bearer " + authorization.getAccessToken())) {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug(String.format("Authentication token is expired or missing, re-authorizing for request %s. Current number of devices in cache: %s.", path, aggregatedDevices.size()));
+                        }
+                        authenticate();
+                    } else if (logger.isDebugEnabled()) {
+                        logger.debug(String.format("Authentication token was renewed by another request, retrying %s with the new token.", path));
                     }
-                    authenticate();
                     HttpHeaders headers = request.getHeaders();
                     headers.put("Authorization", Collections.singletonList("Bearer " + authorization.getAccessToken()));
                     response = execution.execute(request, body);
