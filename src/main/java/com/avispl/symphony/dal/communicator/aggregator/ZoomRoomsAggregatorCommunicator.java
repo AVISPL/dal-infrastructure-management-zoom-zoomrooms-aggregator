@@ -47,6 +47,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import com.avispl.symphony.api.dal.control.Controller;
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
+import com.avispl.symphony.api.dal.error.ResourceNotReachableException;
 import com.avispl.symphony.api.dal.dto.monitor.EndpointStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
@@ -1225,11 +1226,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 //            try {
             JsonNode meetingSettings = retrieveAccountSettings("meeting");
             if (meetingSettings != null) {
-                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
+                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, meetingSettings, "AccountMeetingSettings");
             }
             JsonNode alertSettings = retrieveAccountSettings("alert");
             if (alertSettings != null) {
-                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
+                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, alertSettings, "AccountAlertSettings");
             }
             // if the property isn't there - we should not display this control and its label
             accountSettingsControls.removeIf(advancedControllableProperty -> {
@@ -2506,6 +2507,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 message += " with code " + ((CommandFailureException) e).getStatusCode();
             }
             knownErrors.put(PropertyNameConstants.LOGIN_ERROR_KEY, message);
+            if (e instanceof ResourceNotReachableException) {
+                // Connectivity issue, not a credentials issue - propagate as is, so it's not reported as a login failure
+                throw e;
+            }
             throw new FailedLoginException(message);
         }
         if (response == null) {
