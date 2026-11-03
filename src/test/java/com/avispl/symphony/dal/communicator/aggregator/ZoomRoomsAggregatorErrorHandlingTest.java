@@ -59,7 +59,8 @@ public class ZoomRoomsAggregatorErrorHandlingTest {
     }
 
     /**
-     * Account settings endpoint fails: statistics are still reported, without the account settings groups.
+     * Account settings endpoint fails: statistics are still reported, without the account settings groups, and the
+     * failure is reported.
      */
     @Test
     public void failedAccountSettingsDoNotBreakStatistics() throws Exception {
@@ -76,6 +77,9 @@ public class ZoomRoomsAggregatorErrorHandlingTest {
 
             Assertions.assertTrue(statistics.getStatistics().keySet().stream().noneMatch(key -> key.startsWith("AccountMeetingSettings#")));
             Assertions.assertTrue(statistics.getStatistics().keySet().stream().noneMatch(key -> key.startsWith("AccountAlertSettings#")));
+            String error = statistics.getStatistics().get("Errors#AccountSettingsRetrievalError");
+            Assertions.assertNotNull(error, "account settings failure reported: " + statistics.getStatistics());
+            Assertions.assertTrue(error.contains("meeting") && error.contains("alert") && error.contains("500"), error);
         } finally {
             communicator.destroy();
         }

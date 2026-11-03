@@ -69,6 +69,9 @@ public class PropertyNameConstants {
     public static final String ROOMS_LIST_RETRIEVAL_ERROR_KEY = "ZoomRoomsListRetrievalError";
     public static final String ROOMS_METRICS_RETRIEVAL_ERROR_KEY = "ZoomRoomsMetricsRetrievalError";
     public static final String LOGIN_ERROR_KEY = "LoginError";
+    public static final String ACCOUNT_SETTINGS_RETRIEVAL_ERROR_KEY = "AccountSettingsRetrievalError";
+    /** Prefix of the error statistics of the aggregator device. */
+    public static final String ERRORS_GROUP = "Errors#";
 
     /** @since 1.2.0 */
     public static final String DEVICE_SYSTEM_KEY = "System";
