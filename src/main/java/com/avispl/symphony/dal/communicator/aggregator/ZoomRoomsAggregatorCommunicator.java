@@ -40,12 +40,14 @@ import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import javax.security.auth.login.FailedLoginException;
 import org.apache.commons.lang3.tuple.Pair;
 
 import com.avispl.symphony.api.dal.control.Controller;
 import com.avispl.symphony.api.dal.dto.control.AdvancedControllableProperty;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
+import com.avispl.symphony.api.dal.error.ResourceNotReachableException;
 import com.avispl.symphony.api.dal.dto.monitor.EndpointStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
@@ -276,19 +278,22 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             }
             boolean unauthorizedError = response.getStatusCode().value() == HttpStatus.UNAUTHORIZED.value();
             if (unauthorizedError) {
-                if (authorizationLock.isLocked()) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(String.format("Invalid authentication token detected, re-authorization is in progress. Scheduling retry for %s. Current number of devices in cache: %s", path, aggregatedDevices.size()));
-                    }
-                    // Authorization is already in progress, so we can just end the following unauthorized request here and it will be retried
+                if (authorizationLock.isHeldByCurrentThread()) {
+                    // The request was made while this thread is authorizing, so it can't re-authorize again
                     return response;
                 }
+                String failedAuthorization = request.getHeaders().getFirst("Authorization");
+                // Waits while another request re-authorizes, then retries with the renewed token
                 authorizationLock.lock();
                 try {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(String.format("Authentication token is expired or missing, re-authorizing for request %s. Current number of devices in cache: %s.", path, aggregatedDevices.size()));
+                    if (authorization == null || Objects.equals(failedAuthorization, "Bearer " + authorization.getAccessToken())) {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug(String.format("Authentication token is expired or missing, re-authorizing for request %s. Current number of devices in cache: %s.", path, aggregatedDevices.size()));
+                        }
+                        authenticate();
+                    } else if (logger.isDebugEnabled()) {
+                        logger.debug(String.format("Authentication token was renewed by another request, retrying %s with the new token.", path));
                     }
-                    authenticate();
                     HttpHeaders headers = request.getHeaders();
                     headers.put("Authorization", Collections.singletonList("Bearer " + authorization.getAccessToken()));
                     response = execution.execute(request, body);
@@ -305,14 +310,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String BASE_ZOOM_URL = "v2";
     private static final String ZOOM_ROOMS_URL = "rooms?page_size=%s";
-    private static final String ZOOM_DEVICES_URL = "rooms/%s/devices"; // Requires room Id
-    private static final String ZOOM_ROOM_SETTINGS_URL = "/rooms/%s/settings"; // Requires room Id
+    private static final String ZOOM_ROOM_SETTINGS_URL = "rooms/%s/settings"; // Requires room Id
     private static final String ZOOM_ROOM_ACCOUNT_SETTINGS_URL = "rooms/account_settings";
     private static final String ZOOM_ROOMS_METRICS_URL = "metrics/zoomrooms?page_size=%s";
     private static final String ZOOM_ROOM_LOCATIONS_URL = "rooms/locations?page_size=%s";
     private static final String ZOOM_USER_DETAILS_URL = "users/%s"; // Requires room user id
     private static final String ZOOM_ROOM_METRICS_DETAILS_URL = "metrics/zoomrooms/%s"; // Required room id
-    private static final String ZOOM_ROOM_DEVICES_URL = "rooms/%s/devices";
+    private static final String ZOOM_ROOM_DEVICES_URL = "rooms/%s/devices?page_size=%%s"; // Requires room Id, then page size
 
     /**
      * Room device id prefix, to separate room devices from rooms in {@link #aggregatedDevices} map
@@ -1217,11 +1221,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 //            try {
             JsonNode meetingSettings = retrieveAccountSettings("meeting");
             if (meetingSettings != null) {
-                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("meeting"), "AccountMeetingSettings");
+                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, meetingSettings, "AccountMeetingSettings");
             }
             JsonNode alertSettings = retrieveAccountSettings("alert");
             if (alertSettings != null) {
-                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, retrieveAccountSettings("alert"), "AccountAlertSettings");
+                aggregatedDeviceProcessor.applyProperties(statistics, accountSettingsControls, alertSettings, "AccountAlertSettings");
             }
             // if the property isn't there - we should not display this control and its label
             accountSettingsControls.removeIf(advancedControllableProperty -> {
@@ -1229,6 +1233,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 if (StringUtils.isNullOrEmpty(value)) {
                     statistics.remove(advancedControllableProperty.getName());
                     return true;
+                }
+                // the statistics entry holds the control's current value, the mapping only provides a placeholder
+                if (advancedControllableProperty.getValue() != null) {
+                    statistics.put(advancedControllableProperty.getName(), value);
                 }
                 return false;
             });
@@ -2063,6 +2071,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 settingsProperties.remove(advancedControllableProperty.getName());
                 return true;
             }
+            // the statistics entry holds the control's current value, the mapping only provides a placeholder
+            if (advancedControllableProperty.getValue() != null) {
+                settingsProperties.put(advancedControllableProperty.getName(), value);
+            }
             return false;
         });
 
@@ -2194,11 +2206,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws Exception if any error occurs
      */
     private JsonNode retrieveRoomDevices(String roomId) throws Exception {
-        JsonNode roomDevices = doGetWithRetry(String.format(ZOOM_DEVICES_URL, roomId));
-        if (roomDevices != null && roomDevices.has("devices")) {
-            return roomDevices.get("devices");
-        }
-        return null;
+        ArrayNode roomDevices = JsonNodeFactory.instance.arrayNode();
+        processPaginatedResponse(String.format(ZOOM_ROOM_DEVICES_URL, roomId), roomRequestPageSize, page -> {
+            if (page.has("devices")) {
+                roomDevices.addAll((ArrayNode) page.get("devices"));
+            }
+        });
+        return roomDevices.isEmpty() ? null : roomDevices;
     }
 
     /**
@@ -2498,6 +2512,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 message += " with code " + ((CommandFailureException) e).getStatusCode();
             }
             knownErrors.put(PropertyNameConstants.LOGIN_ERROR_KEY, message);
+            if (e instanceof ResourceNotReachableException) {
+                // Connectivity issue, not a credentials issue - propagate as is, so it's not reported as a login failure
+                throw e;
+            }
             throw new FailedLoginException(message);
         }
         if (response == null) {
