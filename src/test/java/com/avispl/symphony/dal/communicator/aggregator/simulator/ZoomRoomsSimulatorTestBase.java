@@ -306,6 +306,42 @@ public abstract class ZoomRoomsSimulatorTestBase {
         return result;
     }
 
+    /** The aggregator's Errors# statistics, by key without the prefix; empty when getMultipleStatistics throws. */
+    protected static Map<String, String> reportedErrors(ZoomRoomsAggregatorCommunicator communicator) {
+        Map<String, String> errors = new HashMap<>();
+        try {
+            aggregatorStatistics(communicator).getStatistics().forEach((key, value) -> {
+                if (key.startsWith("Errors#")) {
+                    errors.put(key.substring("Errors#".length()), value);
+                }
+            });
+        } catch (Exception e) {
+            // reported as no errors; the tests that need the exception call getMultipleStatistics themselves
+        }
+        return errors;
+    }
+
+    /**
+     * One call of each entry point: "&lt;n&gt; devices" or the exception class retrieveMultipleStatistics threw, then
+     * "stats ok" or the exception class getMultipleStatistics threw, e.g. "6 devices/stats ok".
+     */
+    protected static String callBoth(ZoomRoomsAggregatorCommunicator communicator) {
+        String devices;
+        try {
+            devices = communicator.retrieveMultipleStatistics().size() + " devices";
+        } catch (Exception e) {
+            devices = e.getClass().getSimpleName();
+        }
+        String statistics;
+        try {
+            communicator.getMultipleStatistics();
+            statistics = "stats ok";
+        } catch (Exception e) {
+            statistics = e.getClass().getSimpleName();
+        }
+        return devices + "/" + statistics;
+    }
+
     /** One poll of the aggregated devices; null when the call throws. */
     protected static List<AggregatedDevice> pollOnce(ZoomRoomsAggregatorCommunicator communicator) {
         try {
