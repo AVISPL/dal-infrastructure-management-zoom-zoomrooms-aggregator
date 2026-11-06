@@ -1009,7 +1009,20 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param zoomRoomLocations the {@code java.lang.String} field
      */
     public void setZoomRoomLocations(String zoomRoomLocations) {
-        this.zoomRoomLocations = zoomRoomLocations.replaceAll(" ", "");
+        this.zoomRoomLocations = trimCsvEntries(zoomRoomLocations);
+    }
+
+    /**
+     * Trims every entry of a CSV line, spaces inside an entry are kept: " Building A , HQ" becomes "Building A,HQ".
+     *
+     * @param csv CSV line, may be null
+     * @return CSV line with trimmed entries, empty entries removed
+     */
+    private static String trimCsvEntries(String csv) {
+        if (csv == null) {
+            return null;
+        }
+        return Arrays.stream(csv.split(",")).map(String::trim).filter(entry -> !entry.isEmpty()).collect(Collectors.joining(","));
     }
 
     /**
@@ -1022,12 +1035,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
-     * Sets {@code zoomRoomTypes}, removes whitespaces to make csv line ready for use as a query string parameter
+     * Sets {@code zoomRoomTypes}, trims the entries to make csv line ready for use as a query string parameter
      *
      * @param zoomRoomTypes the {@code java.lang.String} field
      */
     public void setZoomRoomTypes(String zoomRoomTypes) {
-        this.zoomRoomTypes = zoomRoomTypes.replaceAll(" ", "");
+        this.zoomRoomTypes = trimCsvEntries(zoomRoomTypes);
     }
 
     /**
@@ -1592,6 +1605,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         List<String> supportedLocationIds = new ArrayList<>();
         boolean zoomRoomLocationsProvided = !StringUtils.isNullOrEmpty(zoomRoomLocations);
         if (zoomRoomLocationsProvided) {
+            // Location names are matched whole: "Building A" must not match "Building A2"
+            Set<String> locationNames = new HashSet<>(Arrays.asList(zoomRoomLocations.split(",")));
             processPaginatedResponse(ZOOM_ROOM_LOCATIONS_URL, locationRequestPageSize, (roomLocations) -> {
                 if (!roomLocations.isNull() && roomLocations.has("locations")) {
                     roomLocations = roomLocations.get("locations");
@@ -1600,7 +1615,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                         for (JsonNode roomLocation : roomLocations) {
                             Map<String, String> location = new HashMap<>();
                             aggregatedDeviceProcessor.applyProperties(location, roomLocation, "RoomLocation");
-                            if (zoomRoomLocations.contains(location.get(PropertyNameConstants.LOCATION_NAME))) {
+                            if (locationNames.contains(location.get(PropertyNameConstants.LOCATION_NAME))) {
                                 supportedLocationIds.add(location.get(PropertyNameConstants.LOCATION_ID));
                             }
                         }
