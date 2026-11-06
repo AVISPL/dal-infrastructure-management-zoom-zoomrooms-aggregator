@@ -179,7 +179,7 @@ models:
           labelOff: 'Off'
         AccountAlertSettings#ZoomRoomComeBackOnline:
           type: Switch
-          value: get("notification")?.get("zoom_room_come_back_online")?.asText()
+          value: get("notification")?.get("zoom_room_re_online")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
         AccountAlertSettings#SipRegistrationFailed:
@@ -308,7 +308,7 @@ models:
           labelOff: 'Off'
         RoomControlsAlertSettings#ZoomRoomComeBackOnline:
           type: Switch
-          value: get("notification")?.get("zoom_room_come_back_online")?.asText()
+          value: get("notification")?.get("zoom_room_re_online")?.asText()
           labelOn: 'On'
           labelOff: 'Off'
         RoomControlsAlertSettings#SipRegistrationFailed:

@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 
 import javax.security.auth.login.FailedLoginException;
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -22,6 +24,70 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Tag("Mock")
 public class ZoomRoomsAggregatorErrorHandlingTest {
+
+    /**
+     * Errors group lists at most maxErrorCount errors, aggregator-wide errors first, and Errors#Count has the total.
+     */
+    @Test
+    public void errorsAreLimitedByMaxErrorCountAndCounted() throws Exception {
+        ZoomRoomsAggregatorCommunicator communicator = new StubbedCommunicator();
+        Assertions.assertEquals(10, communicator.getMaxErrorCount());
+        Assertions.assertEquals(300, communicator.getMaxErrorLength());
+
+        Map<String, String> errors = new HashMap<>();
+        for (int i = 0; i < 15; i++) {
+            errors.put(String.format("room%02d", i), "RoomUserDetails: status: 400");
+        }
+        errors.put("AccountSettingsRetrievalError", "meeting: 500");
+        errors.put("LoginError", "401");
+        communicator.setMaxErrorCount(5);
+
+        Map<String, String> statistics = reportErrors(communicator, errors);
+
+        Assertions.assertEquals("17", statistics.get("Errors#Count"));
+        Assertions.assertEquals(6, statistics.size(), statistics.toString());
+        Assertions.assertTrue(statistics.containsKey("Errors#AccountSettingsRetrievalError"), statistics.toString());
+        Assertions.assertTrue(statistics.containsKey("Errors#LoginError"), statistics.toString());
+        for (String room : new String[]{"room00", "room01", "room02"}) {
+            Assertions.assertTrue(statistics.containsKey("Errors#" + room), statistics.toString());
+        }
+    }
+
+    /**
+     * Metrics 429: Retry-After is honoured in its forms; without it, no daily requests left means the next 00:00 GMT,
+     * and a per-minute limit (daily requests left) means no extra wait.
+     */
+    @Test
+    public void metricsRetryAfterIsHonoured() {
+        long now = System.currentTimeMillis();
+        long delay = ZoomRoomsAggregatorCommunicator.metricsRetryAfter("120", 5) - now;
+        Assertions.assertTrue(delay >= 119_000 && delay <= 121_000, String.valueOf(delay));
+        Assertions.assertEquals(java.time.Instant.parse("2030-01-02T00:00:00Z").toEpochMilli(),
+                ZoomRoomsAggregatorCommunicator.metricsRetryAfter("2030-01-02T00:00:00Z", 0));
+        Assertions.assertEquals(java.time.Instant.parse("2030-01-02T00:00:00Z").toEpochMilli(),
+                ZoomRoomsAggregatorCommunicator.metricsRetryAfter("Wed, 02 Jan 2030 00:00:00 GMT", 0));
+        long nextMidnight = java.time.LocalDate.now(java.time.ZoneOffset.UTC).plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+        Assertions.assertEquals(nextMidnight, ZoomRoomsAggregatorCommunicator.metricsRetryAfter(null, 0));
+        Assertions.assertNull(ZoomRoomsAggregatorCommunicator.metricsRetryAfter(null, 25));
+        Assertions.assertNull(ZoomRoomsAggregatorCommunicator.metricsRetryAfter(null, null));
+    }
+
+    /**
+     * No errors: no Errors group at all, not even Errors#Count.
+     */
+    @Test
+    public void noErrorsReportNothing() throws Exception {
+        Assertions.assertTrue(reportErrors(new StubbedCommunicator(), new HashMap<>()).isEmpty());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, String> reportErrors(ZoomRoomsAggregatorCommunicator communicator, Map<String, String> errors) throws Exception {
+        Method reportErrors = ZoomRoomsAggregatorCommunicator.class.getDeclaredMethod("reportErrors", Map.class, Map.class);
+        reportErrors.setAccessible(true);
+        Map<String, String> statistics = new HashMap<>();
+        reportErrors.invoke(communicator, statistics, errors);
+        return statistics;
+    }
 
     /**
      * Account settings endpoint answers the first request per setting type, and fails every request after it.
@@ -59,7 +125,8 @@ public class ZoomRoomsAggregatorErrorHandlingTest {
     }
 
     /**
-     * Account settings endpoint fails: statistics are still reported, without the account settings groups.
+     * Account settings endpoint fails: statistics are still reported, without the account settings groups, and the
+     * failure is reported.
      */
     @Test
     public void failedAccountSettingsDoNotBreakStatistics() throws Exception {
@@ -76,6 +143,9 @@ public class ZoomRoomsAggregatorErrorHandlingTest {
 
             Assertions.assertTrue(statistics.getStatistics().keySet().stream().noneMatch(key -> key.startsWith("AccountMeetingSettings#")));
             Assertions.assertTrue(statistics.getStatistics().keySet().stream().noneMatch(key -> key.startsWith("AccountAlertSettings#")));
+            String error = statistics.getStatistics().get("Errors#AccountSettingsRetrievalError");
+            Assertions.assertNotNull(error, "account settings failure reported: " + statistics.getStatistics());
+            Assertions.assertTrue(error.contains("meeting") && error.contains("alert") && error.contains("500"), error);
         } finally {
             communicator.destroy();
         }
