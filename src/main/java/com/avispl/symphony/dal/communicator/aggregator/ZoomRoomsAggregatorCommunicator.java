@@ -1634,7 +1634,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             String deviceId = aggregatedDevice.getDeviceId();
             retrievedRoomIds.add(deviceId);
             if (aggregatedDevices.containsKey(deviceId)) {
-                aggregatedDevices.get(deviceId).setDeviceOnline(aggregatedDevice.getDeviceOnline());
+                // The rooms list is the source of the room's name and status: a room renamed in Zoom is renamed here too
+                AggregatedDevice cachedRoom = aggregatedDevices.get(deviceId);
+                cachedRoom.setDeviceOnline(aggregatedDevice.getDeviceOnline());
+                cachedRoom.setDeviceName(aggregatedDevice.getDeviceName());
             } else {
                 aggregatedDevices.put(deviceId, aggregatedDevice);
             }
