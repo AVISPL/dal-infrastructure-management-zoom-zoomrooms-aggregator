@@ -111,8 +111,10 @@ public class ZoomRoomsBaselineSimulatorTest extends ZoomRoomsSimulatorTestBase {
                     simSettings.get("meeting.zoom_rooms.show_alert_before_meeting").asBoolean());
             checkSwitch(failures, roomId, room.getControllableProperties(), p, "RoomControlsAlertSettings#ZoomRoomOffline",
                     simSettings.get("alert.notification.zoom_room_offline").asBoolean());
-            checkSwitch(failures, roomId, room.getControllableProperties(), p, "RoomControlsAlertSettings#BatteryIsCharging",
-                    simSettings.get("alert.notification.battery_is_charging").asBoolean());
+            // battery_is_charging is not in the room alert settings of the live API (simulator aligned with it): its
+            // control is not shown, so a battery setting the API has is checked instead
+            checkSwitch(failures, roomId, room.getControllableProperties(), p, "RoomControlsAlertSettings#BatteryLowAndNotCharging",
+                    simSettings.get("alert.notification.battery_low_and_not_charging").asBoolean());
 
             // Live meeting and call status
             boolean inMeeting = "InMeeting".equals(status);
@@ -172,8 +174,8 @@ public class ZoomRoomsBaselineSimulatorTest extends ZoomRoomsSimulatorTestBase {
                 accountSettings.get("meeting.zoom_rooms.weekly_system_restart").asBoolean());
         checkSwitch(failures, "aggregator", aggregator.getControllableProperties(), stats, "AccountAlertSettings#ZoomRoomOffline",
                 accountSettings.get("alert.notification.zoom_room_offline").asBoolean());
-        checkSwitch(failures, "aggregator", aggregator.getControllableProperties(), stats, "AccountAlertSettings#BatteryIsCharging",
-                accountSettings.get("alert.notification.battery_is_charging").asBoolean());
+        checkSwitch(failures, "aggregator", aggregator.getControllableProperties(), stats, "AccountAlertSettings#BatteryLowAndNotCharging",
+                accountSettings.get("alert.notification.battery_low_and_not_charging").asBoolean());
         for (AdvancedControllableProperty control : aggregator.getControllableProperties()) {
             if (!stats.containsKey(control.getName())) {
                 failures.add("aggregator control " + control.getName() + " has no statistics entry");
