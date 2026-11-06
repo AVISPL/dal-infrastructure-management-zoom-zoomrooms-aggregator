@@ -540,9 +540,20 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 }
                 return java.time.ZonedDateTime.parse(value, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli();
             } catch (RuntimeException e) {
-                // falls back to the remaining daily requests below
+                // Unparsable Retry-After: falls back to the remaining daily requests
+                return dailyLimitReset(remaining);
             }
         }
+        return dailyLimitReset(remaining);
+    }
+
+    /**
+     * Next 00:00 GMT (daily limit reset) when no daily requests are remaining.
+     *
+     * @param remaining X-RateLimit-Remaining (daily remainder), may be null
+     * @return epoch millis of the next 00:00 GMT, or null when requests are remaining or the remainder is unknown
+     */
+    private static Long dailyLimitReset(Integer remaining) {
         if (remaining != null && remaining <= 0) {
             return java.time.LocalDate.now(java.time.ZoneOffset.UTC).plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
         }
@@ -1956,7 +1967,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private JsonNode doGetWithRetry(String url) throws Exception {
         int retryAttempts = 0;
         Exception lastError = null;
-        boolean criticalError = false;
         while (retryAttempts++ < 10 && serviceRunning) {
             try {
                 return doGet(url, JsonNode.class);
@@ -1976,19 +1986,16 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 if (e.getStatusCode() != 429) {
                     // Might be 401, 403 or any other error code here so the code will just get stuck
                     // cycling this failed request until it's fixed. So we need to skip this scenario.
-                    criticalError = true;
                     logger.error(String.format("ZoomRooms API error %s while retrieving %s data", e.getStatusCode(), url), e);
                     break;
                 }
             } catch (FailedLoginException fle) {
                 lastError = fle;
-                criticalError = true;
                 break;
             } catch (Exception e) {
                 lastError = e;
                 // if service is running, log error
                 if (serviceRunning) {
-                    criticalError = true;
                     logger.error(String.format("ZoomRooms API error while retrieving %s data", url), e);
                 }
                 break;
@@ -2648,11 +2655,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @throws IllegalArgumentException if the property is not a known setting
      */
     private Setting settingOf(String property) {
-        Setting setting = null;
+        Setting setting;
         try {
             setting = Setting.fromString(ZoomRoomsSetting.valueOf(property.substring(property.indexOf('#') + 1)).toString());
         } catch (IllegalArgumentException e) {
-            // reported below with the property name
+            throw new IllegalArgumentException("Unsupported control property: " + property, e);
         }
         if (setting == null) {
             throw new IllegalArgumentException("Unsupported control property: " + property);
