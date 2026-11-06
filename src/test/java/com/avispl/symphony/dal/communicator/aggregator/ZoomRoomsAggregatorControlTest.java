@@ -47,15 +47,15 @@ public class ZoomRoomsAggregatorControlTest {
         Assertions.assertEquals("{\"client_alert\":{\"detect_camera_error_alert\":\"true\"}}", communicator.patches.get(1).body.toString());
     }
 
-    /** Zoom renamed zoom_room_come_back_online to zoom_room_re_online and ignores the old name: both are written. */
+    /** Zoom renamed zoom_room_come_back_online to zoom_room_re_online and ignores the old name. */
     @Test
-    public void zoomRoomComeBackOnlineWritesCurrentAndLegacyName() throws Exception {
+    public void zoomRoomComeBackOnlineWritesZoomRoomReOnline() throws Exception {
         PatchCapturingCommunicator communicator = new PatchCapturingCommunicator();
         communicator.controlProperty(control("room1", "RoomControlsAlertSettings#ZoomRoomComeBackOnline", 1));
 
         JsonNode notification = communicator.patches.get(0).body.path("notification");
         Assertions.assertEquals("true", notification.path("zoom_room_re_online").asText());
-        Assertions.assertEquals("true", notification.path("zoom_room_come_back_online").asText());
+        Assertions.assertFalse(notification.has("zoom_room_come_back_online"));
     }
 
     /** Zoom answers 429 on quick successive updates: the update is retried. */
@@ -80,11 +80,11 @@ public class ZoomRoomsAggregatorControlTest {
         Assertions.assertEquals(0, communicator.attempts);
     }
 
-    /** The control value is read from zoom_room_re_online, and from zoom_room_come_back_online when only that one is there. */
+    /** The control value is read from zoom_room_re_online. */
     @Test
-    public void zoomRoomComeBackOnlineIsReadFromCurrentOrLegacyName() throws Exception {
-        Assertions.assertEquals("false", comeBackOnlineControlValue("{\"notification\": {\"zoom_room_re_online\": false, \"zoom_room_come_back_online\": true}}"));
-        Assertions.assertEquals("true", comeBackOnlineControlValue("{\"notification\": {\"zoom_room_come_back_online\": true}}"));
+    public void zoomRoomComeBackOnlineIsReadFromZoomRoomReOnline() throws Exception {
+        Assertions.assertEquals("false", comeBackOnlineControlValue("{\"notification\": {\"zoom_room_re_online\": false}}"));
+        Assertions.assertEquals("true", comeBackOnlineControlValue("{\"notification\": {\"zoom_room_re_online\": true}}"));
     }
 
     private static String comeBackOnlineControlValue(String alertSettings) throws Exception {

@@ -2661,7 +2661,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
-     * Request body of a settings update: {"parentNode": {"settingName": value}}, the setting's legacy names get the same value.
+     * Request body of a settings update: {"parentNode": {"settingName": value}}
      *
      * @param setting setting to update
      * @param value new value
@@ -2670,7 +2670,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private Map<String, Map<String, String>> settingPatch(Setting setting, String value) {
         Map<String, String> patch = new HashMap<>();
         patch.put(setting.getSettingName(), value);
-        setting.getLegacyNames().forEach(legacyName -> patch.put(legacyName, value));
         Map<String, Map<String, String>> request = new HashMap<>();
         request.put(setting.getParentNode(), patch);
         return request;
