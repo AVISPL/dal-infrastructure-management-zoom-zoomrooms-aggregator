@@ -54,6 +54,25 @@ public class ZoomRoomsAggregatorErrorHandlingTest {
     }
 
     /**
+     * Metrics 429: Retry-After is honoured in its forms; without it, no daily requests left means the next 00:00 GMT,
+     * and a per-minute limit (daily requests left) means no extra wait.
+     */
+    @Test
+    public void metricsRetryAfterIsHonoured() {
+        long now = System.currentTimeMillis();
+        long delay = ZoomRoomsAggregatorCommunicator.metricsRetryAfter("120", 5) - now;
+        Assertions.assertTrue(delay >= 119_000 && delay <= 121_000, String.valueOf(delay));
+        Assertions.assertEquals(java.time.Instant.parse("2030-01-02T00:00:00Z").toEpochMilli(),
+                ZoomRoomsAggregatorCommunicator.metricsRetryAfter("2030-01-02T00:00:00Z", 0));
+        Assertions.assertEquals(java.time.Instant.parse("2030-01-02T00:00:00Z").toEpochMilli(),
+                ZoomRoomsAggregatorCommunicator.metricsRetryAfter("Wed, 02 Jan 2030 00:00:00 GMT", 0));
+        long nextMidnight = java.time.LocalDate.now(java.time.ZoneOffset.UTC).plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+        Assertions.assertEquals(nextMidnight, ZoomRoomsAggregatorCommunicator.metricsRetryAfter(null, 0));
+        Assertions.assertNull(ZoomRoomsAggregatorCommunicator.metricsRetryAfter(null, 25));
+        Assertions.assertNull(ZoomRoomsAggregatorCommunicator.metricsRetryAfter(null, null));
+    }
+
+    /**
      * No errors: no Errors group at all, not even Errors#Count.
      */
     @Test

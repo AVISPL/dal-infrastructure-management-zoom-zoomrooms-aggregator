@@ -67,6 +67,7 @@ Devices and available devices data can be tuned by adapter configuration propert
 | zoomOAuthHostname                           | Hostname to use for OAuth access token generation                                                                                                                                                                                                             | zoom.us by default. Should be provided without the protocol, port or slashes |
 | includeRoomDevices                          | Include zoom room devices and report them as individual devices provisioned in symphony                                                                                                                                                                       | Boolean, false by default                                                    |
 Note: When mentioned request thresholds are reached - this section of the API is not requested anymore. 
+When the Dashboard (metrics) API answers 429, the metrics are not retried at once: the cached metrics are kept, and the metrics are requested again on the next refresh, or, for the daily limit, after the Retry-After time (the next 00:00 GMT when Zoom does not send it).
 
 For detailed information on aggregator and its configuration, please refer to our knowledgebase -> https://symphony.knowledgeowl.com/help/zoom-rooms-technical-breakdown
 

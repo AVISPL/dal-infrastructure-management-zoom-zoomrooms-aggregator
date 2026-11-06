@@ -294,6 +294,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 if (headerData != null) {
                     metricsRateLimitRemaining = Integer.parseInt(headerData);
                 }
+                if (response.getStatusCode().value() == HttpStatus.TOO_MANY_REQUESTS.value()) {
+                    Long retryAfter = metricsRetryAfter(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER), metricsRateLimitRemaining);
+                    if (retryAfter != null) {
+                        metricsBlockedUntil = retryAfter;
+                        logger.warn(String.format("Metrics API rate limit reached, metrics are not requested until %s", Instant.ofEpochMilli(retryAfter)));
+                    }
+                }
             }
             boolean unauthorizedError = response.getStatusCode().value() == HttpStatus.UNAUTHORIZED.value();
             if (unauthorizedError) {
@@ -504,6 +511,43 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * It is of type {@link Integer} to avoid comparing to 0 and including 0 as a value of extended properties
      */
     private volatile Integer metricsRateLimitRemaining;
+
+    /**
+     * Epoch millis before which the metrics endpoints are not requested: the Retry-After of a metrics 429 (daily limit),
+     * 0 when not limited.
+     */
+    private volatile long metricsBlockedUntil;
+
+    /**
+     * When the metrics endpoints may be requested again after a 429. Retry-After is honoured in any of its forms
+     * (delay in seconds, ISO 8601, HTTP date). Zoom sometimes leaves it out of the daily 429: with no daily requests
+     * remaining, the daily limit resets at the next 00:00 GMT. Otherwise (per-minute limit) there is nothing to wait for
+     * beyond the next refresh.
+     *
+     * @param retryAfter Retry-After header value, may be null
+     * @param remaining  X-RateLimit-Remaining (daily remainder), may be null
+     * @return epoch millis to wait until, or null when the next refresh may request the metrics as usual
+     */
+    static Long metricsRetryAfter(String retryAfter, Integer remaining) {
+        if (retryAfter != null && !retryAfter.trim().isEmpty()) {
+            String value = retryAfter.trim();
+            try {
+                if (value.matches("\\d+")) {
+                    return System.currentTimeMillis() + Long.parseLong(value) * 1000;
+                }
+                if (Character.isDigit(value.charAt(0))) {
+                    return java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli();
+                }
+                return java.time.ZonedDateTime.parse(value, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli();
+            } catch (RuntimeException e) {
+                // falls back to the remaining daily requests below
+            }
+        }
+        if (remaining != null && remaining <= 0) {
+            return java.time.LocalDate.now(java.time.ZoneOffset.UTC).plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+        }
+        return null;
+    }
 
     /**
      * Whether service is running.
@@ -1924,6 +1968,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             } catch (CommandFailureException e) {
                 //TODO propagate 429 on top, so API Error is reported? (make optional)
                 lastError = e;
+                if (e.getStatusCode() == 429 && url.contains("metrics")) {
+                    // Metrics 429 is a per-minute or daily limit, not a per-second one: retrying at once only spends
+                    // requests. The metrics are requested again on the next refresh, or after Retry-After (metricsBlockedUntil)
+                    break;
+                }
                 if (e.getStatusCode() != 429) {
                     // Might be 401, 403 or any other error code here so the code will just get stuck
                     // cycling this failed request until it's fixed. So we need to skip this scenario.
@@ -2452,6 +2501,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             logDebugMessage("includeRoomsMetrics is set to false, skipping metrics retrieval.");
             return;
         }
+        if (metricsBlockedUntil > currentTimestamp) {
+            logDebugMessage(String.format("Metrics API rate limit reached, metrics retrieval is skipped until %s", Instant.ofEpochMilli(metricsBlockedUntil)));
+            return;
+        }
         validMetricsDataRetrievalPeriodTimestamp = currentTimestamp + metricsRetrievalTimeout;
         try {
             processPaginatedResponse(ZOOM_ROOMS_METRICS_URL, roomMetricsPageSize, (roomsMetrics) -> {
@@ -2482,7 +2535,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             logDebugMessage("Updated ZoomRooms metrics entries: " + zoomRoomsMetricsData);
         } catch (CommandFailureException ex) {
             if (ex.getStatusCode() == 429) {
-                logger.warn(String.format("Maximum daily rate limit for %s API was reached.", ZOOM_ROOMS_METRICS_URL), ex);
+                logger.warn(String.format("Rate limit for %s API was reached, cached metrics are kept.", ZOOM_ROOMS_METRICS_URL), ex);
             } else {
                 throw ex;
             }
