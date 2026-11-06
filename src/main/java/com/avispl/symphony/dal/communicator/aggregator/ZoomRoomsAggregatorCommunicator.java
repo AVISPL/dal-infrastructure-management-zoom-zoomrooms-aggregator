@@ -662,6 +662,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     private ConcurrentHashMap<String, Long> validRoomSettingsDataRetrievalPeriodTimestamps = new ConcurrentHashMap<>();
 
     /**
+     * roomId: control values set while that room is being collected. The collection works on a copy of the room's
+     * properties and replaces them when done, so these values are applied to the copy before it replaces them.
+     */
+    private final ConcurrentHashMap<String, Map<String, String>> controlValuesDuringCollection = new ConcurrentHashMap<>();
+
+    /**
      * Map of roomId:timestamp within which the registered room devices details cannot be refreshed.
      * Ignored if the data is not yet retrieved for the room
      */
@@ -2014,7 +2020,31 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             return;
         }
         // To restore properties that were here before, but to override the rest
-        Map<String, String> properties = new HashMap<>(aggregatedZoomRoomDevice.getProperties());
+        Map<String, String> controlValues = new HashMap<>();
+        Map<String, String> properties;
+        synchronized (aggregatedZoomRoomDevice) {
+            controlValuesDuringCollection.put(roomId, controlValues);
+            properties = new HashMap<>(aggregatedZoomRoomDevice.getProperties());
+        }
+        try {
+            collectDeviceDetails(roomId, aggregatedZoomRoomDevice, properties, controlValues);
+        } finally {
+            controlValuesDuringCollection.remove(roomId, controlValues);
+        }
+    }
+
+    /**
+     * Collects the room's groups into {@code properties}, a copy of its properties, then replaces the room's properties
+     * with it, keeping the control values set meanwhile.
+     *
+     * @param roomId                   id of zoom room
+     * @param aggregatedZoomRoomDevice cached room
+     * @param properties               copy of the room's properties
+     * @param controlValues            control values set during this collection, see {@link #controlValuesDuringCollection}
+     * @throws Exception if any error occurs
+     */
+    private void collectDeviceDetails(String roomId, AggregatedDevice aggregatedZoomRoomDevice, Map<String, String> properties,
+            Map<String, String> controlValues) throws Exception {
 
         Map<String, String> roomMetricsProperties = zoomRoomsMetricsData.get(roomId);
 
@@ -2061,7 +2091,11 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             collectRoomGroup(roomId, "RoomDevicesList", failedGroups, () -> updateAndRetrieveRoomDevices(roomId), null);
         }
 
-        aggregatedZoomRoomDevice.setProperties(properties);
+        synchronized (aggregatedZoomRoomDevice) {
+            properties.putAll(controlValues);
+            aggregatedZoomRoomDevice.setProperties(properties);
+            controlValuesDuringCollection.remove(roomId, controlValues);
+        }
         aggregatedZoomRoomDevice.setControllableProperties(controllableProperties);
         if (!failedGroups.isEmpty()) {
             // Reported by the caller as this room's error (Errors#<roomId>), and cleared once every group succeeds
@@ -2189,9 +2223,6 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         }
         validRoomSettingsDataRetrievalPeriodTimestamps.put(roomId, currentTimestamp + roomSettingsRetrievalTimeout);
 
-        cleanupStaleProperties(properties, PropertyNameConstants.ROOM_CONTROLS_ALERT_SETTINGS_GROUP, PropertyNameConstants.ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
-        cleanupStaleControls(controllableProperties, PropertyNameConstants.ROOM_CONTROLS_ALERT_SETTINGS_GROUP, PropertyNameConstants.ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
-
         Map<String, String> settingsProperties = new HashMap<>();
         List<AdvancedControllableProperty> settingsControls = new ArrayList<>();
 
@@ -2238,6 +2269,9 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             return false;
         });
 
+        // The old settings are replaced only once the new ones are retrieved, so the controls never disappear meanwhile
+        cleanupStaleProperties(properties, PropertyNameConstants.ROOM_CONTROLS_ALERT_SETTINGS_GROUP, PropertyNameConstants.ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
+        cleanupStaleControls(controllableProperties, PropertyNameConstants.ROOM_CONTROLS_ALERT_SETTINGS_GROUP, PropertyNameConstants.ROOM_CONTROLS_MEETING_SETTINGS_GROUP);
         properties.putAll(settingsProperties);
         controllableProperties.addAll(settingsControls);
         logDebugMessage("Updated ZoomRooms room settings: " + settingsProperties);
@@ -2342,7 +2376,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         advancedControllableProperties.stream().filter(advancedControllableProperty ->
                         advancedControllableProperty.getName().equals(propertyName)).findFirst()
                 .ifPresent(advancedControllableProperty -> advancedControllableProperty.setValue(value));
-        properties.put(propertyName, value);
+        synchronized (aggregatedDevice) {
+            properties = aggregatedDevice.getProperties();
+            properties.put(propertyName, value);
+            Map<String, String> controlValues = controlValuesDuringCollection.get(roomId);
+            if (controlValues != null) {
+                controlValues.put(propertyName, value);
+            }
+        }
 
         if (propertyName.startsWith(PropertyNameConstants.ROOM_CONTROLS_GROUP)) {
             if (propertyName.endsWith(PropertyNameConstants.LEAVE_CURRENT_MEETING_PROPERTY) || propertyName.endsWith(PropertyNameConstants.END_CURRENT_MEETING_PROPERTY)) {
