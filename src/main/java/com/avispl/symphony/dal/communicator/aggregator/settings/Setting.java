@@ -3,6 +3,10 @@
  */
 package com.avispl.symphony.dal.communicator.aggregator.settings;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Setting class takes value of {@link ZoomRoomsSetting} and splits data onto settingType, parentNode of the property
  * and settingName to use.
@@ -14,11 +18,13 @@ public class Setting {
     private String settingType;
     private String parentNode;
     private String settingName;
+    /** Former names of the setting, written along with {@link #settingName} for accounts that still use them */
+    private List<String> legacyNames = Collections.emptyList();
 
     /**
      * Colon separated string that looks like this
      * meeting:zoom_rooms:upcoming_meeting_alert
-     * which corresponds to settingType:parentNode:settingName
+     * which corresponds to settingType:parentNode:settingName, optionally followed by :legacyName entries
      * <p>
      * It is necessary to keep track of this information, for having an easy support for the room/account
      * settings controllable properties.
@@ -35,6 +41,7 @@ public class Setting {
         setting.setSettingType(values[0]);
         setting.setParentNode(values[1]);
         setting.setSettingName(values[2]);
+        setting.legacyNames = Arrays.asList(values).subList(3, values.length);
         return setting;
     }
 
@@ -90,5 +97,14 @@ public class Setting {
      */
     public void setSettingName(String settingName) {
         this.settingName = settingName;
+    }
+
+    /**
+     * Retrieves {@link #legacyNames}
+     *
+     * @return value of {@link #legacyNames}
+     */
+    public List<String> getLegacyNames() {
+        return legacyNames;
     }
 }

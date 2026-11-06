@@ -38,6 +38,8 @@ public enum ZoomRoomsSetting {
     AutoStartScheduledMeeting("meeting:zoom_rooms:auto_start_scheduled_meeting"),
     /** Property for auto_stop_scheduled_meeting meeting setting */
     AutoStopScheduledMeeting("meeting:zoom_rooms:auto_stop_scheduled_meeting"),
+    /** Property for hide_share_instruction meeting setting (room level only) */
+    HideShareInstruction("meeting:zoom_rooms:hide_share_instruction"),
     /** Property for audio_device_daily_auto_test meeting setting */
     AudioDeviceDailyAutoTest("meeting:zoom_rooms:audio_device_daily_auto_test"),
     /** Property for support_join_3rd_party_meeting meeting setting */
@@ -92,8 +94,11 @@ public enum ZoomRoomsSetting {
     NetworkUnstableDetected("alert:notification:network_unstable_detected"),
     /** Property for zoom_room_offline meeting setting */
     ZoomRoomOffline("alert:notification:zoom_room_offline"),
-    /** Property for zoom_room_come_back_online meeting setting */
-    ZoomRoomComeBackOnline("alert:notification:zoom_room_come_back_online"),
+    /**
+     * Property for zoom_room_re_online alert setting. Zoom renamed zoom_room_come_back_online to zoom_room_re_online
+     * (the old name is still documented, but ignored on update), both names are written
+     */
+    ZoomRoomComeBackOnline("alert:notification:zoom_room_re_online:zoom_room_come_back_online"),
     /** Property for sip_registration_failed meeting setting */
     SipRegistrationFailed("alert:notification:sip_registration_failed"),
     /** Property for sip_registration_re_enabled meeting setting */

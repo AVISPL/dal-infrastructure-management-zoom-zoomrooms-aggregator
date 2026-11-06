@@ -1237,15 +1237,21 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         String property = controllableProperty.getProperty();
         Object value = controllableProperty.getValue();
 
-        if (!StringUtils.isNullOrEmpty(roomId) && !StringUtils.isNullOrEmpty(property)) {
+        if (StringUtils.isNullOrEmpty(property)) {
+            return;
+        }
+        // Account settings are aggregator level controls: routed by name, the device id is not needed
+        if (property.startsWith(PropertyNameConstants.ACCOUNT_CONTROLS_MEETING_SETTINGS_GROUP) || property.startsWith(PropertyNameConstants.ACCOUNT_CONTROLS_ALERT_SETTINGS_GROUP)) {
+            Setting setting = settingOf(property);
+            updateAccountSettings(setting, normalizeSettingData(value));
+            return;
+        }
+        if (!StringUtils.isNullOrEmpty(roomId)) {
             boolean controlValidated = false;
 
             try {
                 if (property.startsWith(PropertyNameConstants.ROOM_CONTROLS_MEETING_SETTINGS_GROUP) || property.startsWith(PropertyNameConstants.ROOM_CONTROLS_ALERT_SETTINGS_GROUP)) {
-                    Setting setting = Setting.fromString(ZoomRoomsSetting.valueOf(property.split("#")[1]).toString());
-                    if (setting == null) {
-                        throw new IllegalArgumentException("Invalid property name provided: " + property);
-                    }
+                    Setting setting = settingOf(property);
                     String settingValue;
                     if (property.endsWith(ZoomRoomsSetting.BatteryPercentage.name())) {
                         // BatteryPercentage is a Numeric controllable property
@@ -1253,15 +1259,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     } else {
                         settingValue = normalizeSettingData(value);
                     }
-                    updateRoomSetting(roomId, setting.getSettingName(), settingValue, setting.getSettingType(), setting.getParentNode());
-                    controlValidated = true;
-                } else if (property.startsWith(PropertyNameConstants.ACCOUNT_CONTROLS_MEETING_SETTINGS_GROUP) || property.startsWith(PropertyNameConstants.ACCOUNT_CONTROLS_ALERT_SETTINGS_GROUP)) {
-                    Setting setting = Setting.fromString(ZoomRoomsSetting.valueOf(property.split("#")[1]).toString());
-                    if (setting == null) {
-                        throw new IllegalArgumentException("Invalid property name provided: " + property);
-                    }
-                    String settingValue = normalizeSettingData(value);
-                    updateAccountSettings(setting.getSettingName(), settingValue, setting.getSettingType(), setting.getParentNode());
+                    updateRoomSetting(roomId, setting, settingValue);
                     controlValidated = true;
                 } else {
                     if (logger.isWarnEnabled()) {
@@ -2510,36 +2508,82 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     /**
      * Update Zoom Account setting
      *
-     * @param setting    name of the setting to update
-     * @param value      new value for the property
-     * @param type       of the setting, either alert or meeting
-     * @param parentNode json parent node to use while building json request payload
+     * @param setting setting to update
+     * @param value   new value for the setting
      * @throws Exception if a communication error occurs
      */
-    private void updateAccountSettings(String setting, String value, String type, String parentNode) throws Exception {
-        Map<String, Map<String, String>> request = new HashMap<>();
-        Map<String, String> patch = new HashMap<>();
-        patch.put(setting, value);
-        request.put(parentNode, patch);
-        doPatch(ZOOM_ROOM_ACCOUNT_SETTINGS_URL + "?setting_type=" + type, request, String.class);
+    private void updateAccountSettings(Setting setting, String value) throws Exception {
+        doPatchWithRetry(ZOOM_ROOM_ACCOUNT_SETTINGS_URL + "?setting_type=" + setting.getSettingType(), settingPatch(setting, value));
     }
 
     /**
      * Update ZoomRoom setting
      *
-     * @param roomId     id of the room to update property for
-     * @param setting    name of the setting to update
-     * @param value      new value for the setting
-     * @param type       of the setting, either alert or meeting
-     * @param parentNode json parent node to use while building json request payload
+     * @param roomId  id of the room to update property for
+     * @param setting setting to update
+     * @param value   new value for the setting
      * @throws Exception if a communication error occurs
      */
-    private void updateRoomSetting(String roomId, String setting, String value, String type, String parentNode) throws Exception {
-        Map<String, Map<String, String>> request = new HashMap<>();
+    private void updateRoomSetting(String roomId, Setting setting, String value) throws Exception {
+        doPatchWithRetry(String.format(ZOOM_ROOM_SETTINGS_URL, roomId) + "?setting_type=" + setting.getSettingType(), settingPatch(setting, value));
+    }
+
+    /**
+     * The {@link Setting} of a room or account settings control property.
+     *
+     * @param property control property name, Group#SettingName
+     * @return setting to update
+     * @throws IllegalArgumentException if the property is not a known setting
+     */
+    private Setting settingOf(String property) {
+        Setting setting = null;
+        try {
+            setting = Setting.fromString(ZoomRoomsSetting.valueOf(property.substring(property.indexOf('#') + 1)).toString());
+        } catch (IllegalArgumentException e) {
+            // reported below with the property name
+        }
+        if (setting == null) {
+            throw new IllegalArgumentException("Unsupported control property: " + property);
+        }
+        return setting;
+    }
+
+    /**
+     * Request body of a settings update: {"parentNode": {"settingName": value}}, the setting's legacy names get the same value.
+     *
+     * @param setting setting to update
+     * @param value new value
+     * @return request body
+     */
+    private Map<String, Map<String, String>> settingPatch(Setting setting, String value) {
         Map<String, String> patch = new HashMap<>();
-        patch.put(setting, value);
-        request.put(parentNode, patch);
-        doPatch(String.format(ZOOM_ROOM_SETTINGS_URL, roomId) + "?setting_type=" + type, request, String.class);
+        patch.put(setting.getSettingName(), value);
+        setting.getLegacyNames().forEach(legacyName -> patch.put(legacyName, value));
+        Map<String, Map<String, String>> request = new HashMap<>();
+        request.put(setting.getParentNode(), patch);
+        return request;
+    }
+
+    /**
+     * PATCH request, retried while Zoom answers 429 (per-second rate limit), like {@link #doGetWithRetry}.
+     *
+     * @param url to send the request to
+     * @param request body
+     * @throws Exception if the request fails, or still answers 429 after all attempts
+     */
+    private void doPatchWithRetry(String url, Object request) throws Exception {
+        int attempt = 0;
+        while (true) {
+            try {
+                doPatch(url, request, String.class);
+                return;
+            } catch (CommandFailureException e) {
+                if (e.getStatusCode() != HttpStatus.TOO_MANY_REQUESTS.value() || ++attempt >= 10) {
+                    throw e;
+                }
+                TimeUnit.MILLISECONDS.sleep(200);
+            }
+        }
     }
 
     /**
