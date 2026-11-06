@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 
 import javax.security.auth.login.FailedLoginException;
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -22,6 +24,51 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Tag("Mock")
 public class ZoomRoomsAggregatorErrorHandlingTest {
+
+    /**
+     * Errors group lists at most maxErrorCount errors, aggregator-wide errors first, and Errors#Count has the total.
+     */
+    @Test
+    public void errorsAreLimitedByMaxErrorCountAndCounted() throws Exception {
+        ZoomRoomsAggregatorCommunicator communicator = new StubbedCommunicator();
+        Assertions.assertEquals(10, communicator.getMaxErrorCount());
+        Assertions.assertEquals(300, communicator.getMaxErrorLength());
+
+        Map<String, String> errors = new HashMap<>();
+        for (int i = 0; i < 15; i++) {
+            errors.put(String.format("room%02d", i), "RoomUserDetails: status: 400");
+        }
+        errors.put("AccountSettingsRetrievalError", "meeting: 500");
+        errors.put("LoginError", "401");
+        communicator.setMaxErrorCount(5);
+
+        Map<String, String> statistics = reportErrors(communicator, errors);
+
+        Assertions.assertEquals("17", statistics.get("Errors#Count"));
+        Assertions.assertEquals(6, statistics.size(), statistics.toString());
+        Assertions.assertTrue(statistics.containsKey("Errors#AccountSettingsRetrievalError"), statistics.toString());
+        Assertions.assertTrue(statistics.containsKey("Errors#LoginError"), statistics.toString());
+        for (String room : new String[]{"room00", "room01", "room02"}) {
+            Assertions.assertTrue(statistics.containsKey("Errors#" + room), statistics.toString());
+        }
+    }
+
+    /**
+     * No errors: no Errors group at all, not even Errors#Count.
+     */
+    @Test
+    public void noErrorsReportNothing() throws Exception {
+        Assertions.assertTrue(reportErrors(new StubbedCommunicator(), new HashMap<>()).isEmpty());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, String> reportErrors(ZoomRoomsAggregatorCommunicator communicator, Map<String, String> errors) throws Exception {
+        Method reportErrors = ZoomRoomsAggregatorCommunicator.class.getDeclaredMethod("reportErrors", Map.class, Map.class);
+        reportErrors.setAccessible(true);
+        Map<String, String> statistics = new HashMap<>();
+        reportErrors.invoke(communicator, statistics, errors);
+        return statistics;
+    }
 
     /**
      * Account settings endpoint answers the first request per setting type, and fails every request after it.

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -386,7 +387,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
     /** {@link #knownErrors} keys that are not room ids. */
     private static final Set<String> GLOBAL_ERROR_KEYS = new HashSet<>(Arrays.asList(PropertyNameConstants.LOGIN_ERROR_KEY,
-            PropertyNameConstants.ROOMS_LIST_RETRIEVAL_ERROR_KEY, PropertyNameConstants.ROOMS_METRICS_RETRIEVAL_ERROR_KEY));
+            PropertyNameConstants.ROOMS_LIST_RETRIEVAL_ERROR_KEY, PropertyNameConstants.ROOMS_METRICS_RETRIEVAL_ERROR_KEY,
+            PropertyNameConstants.ACCOUNT_SETTINGS_RETRIEVAL_ERROR_KEY));
 
     /**
      * Devices this aggregator is responsible for
@@ -458,7 +460,32 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Maximum error length to display in the Errors group on aggregator level
      * @since 1.1.0
      * */
-    private int maxErrorLength = 120;
+    private int maxErrorLength = 300;
+
+    /**
+     * Maximum number of errors to display in the Errors group on aggregator level. Errors#Count reports the total,
+     * including the errors that are not displayed
+     * @since 1.2.10
+     * */
+    private int maxErrorCount = 10;
+
+    /**
+     * Retrieves {@link #maxErrorCount}
+     *
+     * @return value of {@link #maxErrorCount}
+     */
+    public int getMaxErrorCount() {
+        return maxErrorCount;
+    }
+
+    /**
+     * Sets {@link #maxErrorCount} value
+     *
+     * @param maxErrorCount new value of {@link #maxErrorCount}
+     */
+    public void setMaxErrorCount(int maxErrorCount) {
+        this.maxErrorCount = maxErrorCount;
+    }
 
     /**
      * timeout that indicates Data Loader being idle
@@ -1155,6 +1182,25 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         return restTemplate;
     }
 
+    /**
+     * Adds errors to the Errors group: Errors#Count with the total number of errors, then at most {@link #maxErrorCount}
+     * of the errors themselves - aggregator-wide errors first, then room errors by room id. Nothing is added without errors.
+     *
+     * @param statistics statistics to add the errors to
+     * @param errors error messages by key (error key or room id)
+     */
+    private void reportErrors(Map<String, String> statistics, Map<String, String> errors) {
+        if (errors.isEmpty()) {
+            return;
+        }
+        statistics.put(PropertyNameConstants.ERRORS_GROUP + PropertyNameConstants.ERRORS_COUNT_KEY, String.valueOf(errors.size()));
+        errors.entrySet().stream()
+                .sorted(Comparator.<Map.Entry<String, String>>comparingInt(error -> GLOBAL_ERROR_KEYS.contains(error.getKey()) ? 0 : 1)
+                        .thenComparing(Map.Entry::getKey))
+                .limit(Math.max(0, maxErrorCount))
+                .forEach(error -> statistics.put(PropertyNameConstants.ERRORS_GROUP + error.getKey(), error.getValue()));
+    }
+
     /** Throws the recorded {@link #unreachableErrors} error, if any, to the caller of get/retrieveMultipleStatistics. */
     private void throwIfUnreachable() throws ResourceNotReachableException {
         for (ResourceNotReachableException unreachable : unreachableErrors.values()) {
@@ -1263,6 +1309,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         ExtendedStatistics extendedStatistics = new ExtendedStatistics();
         Map<String, String> dynamicStatistics = new HashMap<>();
 
+        // Errors of this call and of the background collection, reported together (see reportErrors)
+        Map<String, String> errors = new HashMap<>();
         List<AdvancedControllableProperty> accountSettingsControls = new ArrayList<>();
         if (displayAccountSettings) {
             // A failed settings type is reported and left out, the rest of the statistics are still returned
@@ -1286,8 +1334,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                 }
             }
             if (!accountSettingsErrors.isEmpty()) {
-                statistics.put(PropertyNameConstants.ERRORS_GROUP + PropertyNameConstants.ACCOUNT_SETTINGS_RETRIEVAL_ERROR_KEY,
-                        String.join("; ", accountSettingsErrors));
+                errors.put(PropertyNameConstants.ACCOUNT_SETTINGS_RETRIEVAL_ERROR_KEY, String.join("; ", accountSettingsErrors));
             }
             // if the property isn't there - we should not display this control and its label
             accountSettingsControls.removeIf(advancedControllableProperty -> {
@@ -1318,7 +1365,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         dynamicStatistics.put(PropertyNameConstants.MONITORING_CYCLE_DURATION, String.valueOf(lastMonitoringCycleDuration));
         dynamicStatistics.put(PropertyNameConstants.MONITORED_DEVICES_TOTAL, String.valueOf(aggregatedDevices.size()));
 
-        knownErrors.forEach((key, value) -> statistics.put(PropertyNameConstants.ERRORS_GROUP + key, value));
+        errors.putAll(knownErrors);
+        reportErrors(statistics, errors);
         if (metricsRateLimitRemaining != null) {
             statistics.put("DashboardMetricsDailyRateLimitRemaining", String.valueOf(metricsRateLimitRemaining));
         }
