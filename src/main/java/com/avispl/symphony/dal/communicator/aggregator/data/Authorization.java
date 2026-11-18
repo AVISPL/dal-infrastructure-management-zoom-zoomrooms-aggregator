@@ -5,10 +5,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class Authorization {
     private final long loginDateTime;
     /**
-     * Create an instance of LoginInfo
+     * Create an instance of LoginInfo. Created when the token response is received, so the expiry is counted from now.
      */
     public Authorization() {
-        this.loginDateTime = 0;
+        this.loginDateTime = System.currentTimeMillis();
     }
 
     @JsonProperty("expires_in")

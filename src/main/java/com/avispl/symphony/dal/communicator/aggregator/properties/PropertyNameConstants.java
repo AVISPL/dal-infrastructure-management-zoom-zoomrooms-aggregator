@@ -33,7 +33,7 @@ public class PropertyNameConstants {
     public static final String ROOM_CONTROLS_MEETING_SETTINGS_GROUP = "RoomControlsMeetingSettings#";
     public static final String ROOM_CONTROLS_ALERT_SETTINGS_GROUP = "RoomControlsAlertSettings#";
     public static final String ACCOUNT_CONTROLS_MEETING_SETTINGS_GROUP = "AccountMeetingSettings#";
-    public static final String ACCOUNT_CONTROLS_ALERT_SETTINGS_GROUP = "AccountMeetingSettings#";
+    public static final String ACCOUNT_CONTROLS_ALERT_SETTINGS_GROUP = "AccountAlertSettings#";
 
     public static final String LEAVE_CURRENT_MEETING_PROPERTY = "LeaveCurrentMeeting";
     public static final String END_CURRENT_MEETING_PROPERTY = "EndCurrentMeeting";
@@ -69,6 +69,11 @@ public class PropertyNameConstants {
     public static final String ROOMS_LIST_RETRIEVAL_ERROR_KEY = "ZoomRoomsListRetrievalError";
     public static final String ROOMS_METRICS_RETRIEVAL_ERROR_KEY = "ZoomRoomsMetricsRetrievalError";
     public static final String LOGIN_ERROR_KEY = "LoginError";
+    public static final String ACCOUNT_SETTINGS_RETRIEVAL_ERROR_KEY = "AccountSettingsRetrievalError";
+    /** Prefix of the error statistics of the aggregator device. */
+    public static final String ERRORS_GROUP = "Errors#";
+    /** Errors group key with the total number of errors, including the ones not displayed. */
+    public static final String ERRORS_COUNT_KEY = "Count";
 
     /** @since 1.2.0 */
     public static final String DEVICE_SYSTEM_KEY = "System";

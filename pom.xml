@@ -6,11 +6,14 @@
 
     <groupId>com.avispl.symphony.dal.device.aggregator.zoom.rooms</groupId>
     <artifactId>symphony-dal-communicator-aggregator-zoom-rooms</artifactId>
-    <version>1.2.9</version>
+    <version>1.2.10</version>
     <properties>
         <symphonyApiVersion>RELEASE</symphonyApiVersion>
         <timestamp>${maven.build.timestamp}</timestamp>
         <maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
+        <!-- test tags run by default; override with -Dgroups=simulatorTest (or test) -->
+        <groups>Mock</groups>
+        <junit.version>5.13.3</junit.version>
     </properties>
     <build>
         <plugins>
@@ -70,17 +73,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.19.1</version> <!-- Specific due to memory leak in 2.20 -->
-                <dependencies>
-                    <dependency>
-                        <groupId>org.junit.platform</groupId>
-                        <artifactId>junit-platform-surefire-provider</artifactId>
-                        <version>1.0.1</version>
-                    </dependency>
-                </dependencies>
-                <configuration>
-                    <groups>Mock</groups>
-                </configuration>
+                <version>3.5.4</version>
             </plugin>
         </plugins>
         <resources>
@@ -228,13 +221,19 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>5.7.0-M1</version>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.vintage</groupId>
             <artifactId>junit-vintage-engine</artifactId>
-            <version>5.6.0-M1</version>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
