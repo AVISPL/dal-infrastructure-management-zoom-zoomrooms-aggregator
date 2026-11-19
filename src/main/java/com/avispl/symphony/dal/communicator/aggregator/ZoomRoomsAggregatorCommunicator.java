@@ -42,6 +42,8 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import javax.security.auth.login.FailedLoginException;
@@ -60,6 +62,9 @@ import com.avispl.symphony.api.dal.monitor.Monitorable;
 import com.avispl.symphony.api.dal.monitor.aggregator.Aggregator;
 import com.avispl.symphony.api.dal.webhook.WebhookEnabled;
 import com.avispl.symphony.api.dal.webhook.WebhookEvent;
+import com.avispl.symphony.api.dal.webhook.WebhookReceiver;
+import com.avispl.symphony.api.dal.webhook.WebhookReply;
+import com.avispl.symphony.api.dal.webhook.WebhookRequest;
 import com.avispl.symphony.dal.aggregator.parser.AggregatedDeviceProcessor;
 import com.avispl.symphony.dal.aggregator.parser.PropertiesMapping;
 import com.avispl.symphony.dal.aggregator.parser.PropertiesMappingParser;
@@ -70,6 +75,7 @@ import com.avispl.symphony.dal.communicator.aggregator.settings.Setting;
 import com.avispl.symphony.dal.communicator.aggregator.settings.ZoomRoomsSetting;
 import com.avispl.symphony.dal.communicator.aggregator.status.RoomStatusProcessor;
 import com.avispl.symphony.dal.communicator.aggregator.webhook.ZoomWebhookEvent;
+import com.avispl.symphony.dal.communicator.aggregator.webhook.ZoomWebhookSignature;
 import com.avispl.symphony.dal.util.StringUtils;
 
 /**
@@ -80,7 +86,7 @@ import com.avispl.symphony.dal.util.StringUtils;
  * @author Maksym.Rossiytsev
  * @since 1.0.0
  */
-public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements Aggregator, Monitorable, Controller, WebhookEnabled {
+public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements Aggregator, Monitorable, Controller, WebhookEnabled, WebhookReceiver {
 
     /**
      * Paginated response interface, needed to delegate paginated meetings to a caller
@@ -412,6 +418,12 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * metrics retrieval at least {@link #WEBHOOK_OVERRIDE_SETTLE_MS} after the event shows the API has caught up.
      */
     private final ConcurrentHashMap<String, InCallOverride> webhookInCallOverrides = new ConcurrentHashMap<>();
+
+    /** Secret token of the Zoom app's event subscription: signs every request and answers the endpoint.url_validation handshake. */
+    private String webhookSecretToken;
+
+    /** Meeting a room joined as a participant (someone else hosts it), by room id: its meeting.ended ends the room's call too. */
+    private final ConcurrentHashMap<String, String> joinedMeetings = new ConcurrentHashMap<>();
 
     /** Highest webhook sequence already folded in: redeliveries (at-least-once) are skipped. */
     private volatile long lastDigestedSequence;
@@ -1523,6 +1535,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             aggregatedDevices.clear();
             zoomRoomsMetricsData.clear();
             webhookInCallOverrides.clear();
+            joinedMeetings.clear();
             validUserDetailsDataRetrievalPeriodTimestamps.clear();
             validRoomDevicesDataRetrievalPeriodTimestamps.clear();
             validRoomSettingsDataRetrievalPeriodTimestamps.clear();
@@ -1639,6 +1652,50 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     /**
+     * Retrieves {@code webhookSecretToken}
+     *
+     * @return value of {@link #webhookSecretToken}
+     */
+    public String getWebhookSecretToken() {
+        return webhookSecretToken;
+    }
+
+    /**
+     * Sets {@code webhookSecretToken}
+     *
+     * @param webhookSecretToken the {@code webhookSecretToken} field
+     */
+    public void setWebhookSecretToken(String webhookSecretToken) {
+        this.webhookSecretToken = webhookSecretToken;
+    }
+
+    /**
+     * Judges a Zoom request before the host queues it: a request not signed with {@link #webhookSecretToken} (or too old to
+     * be fresh) is refused; endpoint.url_validation is answered with the HMAC of its plainToken and not delivered; every
+     * other event goes on to {@link #digest(List)}. Uses the secret only, so it is safe next to a running poll.
+     */
+    @Override
+    public WebhookReply receive(WebhookRequest request) throws Exception {
+        String secret = webhookSecretToken;
+        if (StringUtils.isNullOrEmpty(secret)) {
+            return WebhookReply.reject(401, "no webhook secret token configured");
+        }
+        if (!ZoomWebhookSignature.valid(secret, request.getHeaders().get("x-zm-request-timestamp"), request.getBody(),
+                request.getHeaders().get("x-zm-signature"), java.time.Instant.now())) {
+            return WebhookReply.reject(401, "invalid or stale x-zm-signature");
+        }
+        JsonNode event = new ObjectMapper().readTree(request.getBody());
+        if ("endpoint.url_validation".equals(event.path("event").asText())) {
+            String plainToken = event.path("payload").path("plainToken").asText();
+            ObjectNode answer = new ObjectMapper().createObjectNode();
+            answer.put("plainToken", plainToken);
+            answer.put("encryptedToken", ZoomWebhookSignature.hmacHex(secret, plainToken));
+            return WebhookReply.answer(200, "application/json", answer.toString());
+        }
+        return WebhookReply.accept();
+    }
+
+    /**
      * Folds Zoom meeting webhook events into the adapter's state; the next {@link #retrieveMultipleStatistics()} reports it.
      * <ul>
      * <li>meeting.started: the room's {@link EndpointStatistics#setInCall(Boolean) inCall} is {@code true} at once (no
@@ -1673,6 +1730,13 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
                     break;
                 case MEETING_ENDED:
                     applyMeetingEvent(event.getSequence(), parsed, false, at);
+                    endJoinedMeeting(event.getSequence(), parsed, at);
+                    break;
+                case PARTICIPANT_JOINED:
+                    applyParticipantEvent(event.getSequence(), parsed, true, at);
+                    break;
+                case PARTICIPANT_LEFT:
+                    applyParticipantEvent(event.getSequence(), parsed, false, at);
                     break;
                 case URL_VALIDATION:
                     logger.warn(String.format("Webhook event %s is Zoom's endpoint.url_validation: it must be answered by the receiving service, skipped", event.getSequence()));
@@ -1685,11 +1749,47 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
     }
 
     private void applyMeetingEvent(long sequence, ZoomWebhookEvent event, boolean inCall, long at) {
-        String roomId = resolveRoomId(event);
+        String roomId = resolveRoomId(event.getHostId());
         if (roomId == null) {
             logDebugMessage(String.format("Webhook event %s (meeting %s) is hosted by %s, not a monitored room's user, skipped", sequence, event.getMeetingId(), event.getHostId()));
             return;
         }
+        applyInCall(sequence, roomId, inCall, at, event.getMeetingId());
+    }
+
+    /**
+     * A room joining or leaving someone else's meeting: the participant's user id is the room's user id. A join is remembered,
+     * so that the meeting's end also ends the room's call.
+     */
+    private void applyParticipantEvent(long sequence, ZoomWebhookEvent event, boolean inCall, long at) {
+        String roomId = resolveRoomId(event.getParticipantUserId());
+        if (roomId == null) {
+            logDebugMessage(String.format("Webhook event %s (meeting %s): participant %s is not a monitored room's user, skipped", sequence, event.getMeetingId(), event.getParticipantUserId()));
+            return;
+        }
+        if (inCall && event.getMeetingId() != null) {
+            joinedMeetings.put(roomId, event.getMeetingId());
+        } else {
+            joinedMeetings.remove(roomId);
+        }
+        applyInCall(sequence, roomId, inCall, at, event.getMeetingId());
+    }
+
+    /**
+     * Ends the call of every room that joined the meeting that just ended.
+     */
+    private void endJoinedMeeting(long sequence, ZoomWebhookEvent event, long at) {
+        if (event.getMeetingId() == null) {
+            return;
+        }
+        for (Map.Entry<String, String> joined : joinedMeetings.entrySet()) {
+            if (event.getMeetingId().equals(joined.getValue()) && joinedMeetings.remove(joined.getKey(), joined.getValue())) {
+                applyInCall(sequence, joined.getKey(), false, at, event.getMeetingId());
+            }
+        }
+    }
+
+    private void applyInCall(long sequence, String roomId, boolean inCall, long at, String meetingId) {
         InCallOverride current = webhookInCallOverrides.get(roomId);
         if (current != null && current.at > at) {
             logger.info(String.format("Webhook event %s for room %s is older than the room's last event, skipped", sequence, roomId));
@@ -1700,15 +1800,14 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (room != null) {
             setRoomInCall(room, inCall, true);
         }
-        logger.info(String.format("Webhook event %s: room %s inCall=%s (meeting %s)", sequence, roomId, inCall, event.getMeetingId()));
+        logger.info(String.format("Webhook event %s: room %s inCall=%s (meeting %s)", sequence, roomId, inCall, meetingId));
     }
 
     /**
-     * Room id for an event: the room whose user id ({@link AggregatedDevice#getSerialNumber()}) is the meeting's host id;
-     * {@code null} if no monitored room hosts it.
+     * Room id for a Zoom user id: the room whose user id ({@link AggregatedDevice#getSerialNumber()}) it is; {@code null} if
+     * no monitored room has that user.
      */
-    private String resolveRoomId(ZoomWebhookEvent event) {
-        String hostId = event.getHostId();
+    private String resolveRoomId(String hostId) {
         if (hostId == null) {
             return null;
         }
@@ -1769,6 +1868,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         // Room errors are keyed by room id: drop the ones of rooms that are gone
         knownErrors.keySet().removeIf(key -> !GLOBAL_ERROR_KEYS.contains(key) && !aggregatedDevices.containsKey(key));
         webhookInCallOverrides.keySet().removeIf(roomId -> !aggregatedDevices.containsKey(roomId));
+        joinedMeetings.keySet().removeIf(roomId -> !aggregatedDevices.containsKey(roomId));
         nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
 
         knownErrors.remove(PropertyNameConstants.ROOMS_LIST_RETRIEVAL_ERROR_KEY);

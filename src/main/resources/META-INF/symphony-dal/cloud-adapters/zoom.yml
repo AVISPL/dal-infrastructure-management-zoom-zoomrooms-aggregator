@@ -1,0 +1,70 @@
+# How the Symphony cloud adapter service hosts this adapter (ignored by CommProxy). File name = adapter type key.
+class-name: com.avispl.symphony.dal.communicator.aggregator.ZoomRoomsAggregatorCommunicator
+display-name: Zoom Rooms
+# no room-property: each aggregated device is a Zoom Room, its name is the device name
+webhook-watch: [inCall]   # Zoom webhooks report meetings (inCall), not online
+setup-steps:
+  - "In Zoom App Marketplace (Develop → Build App) create a Server-to-Server OAuth app with the Zoom Rooms scopes; copy its account ID, client ID and client secret into the fields below."
+  - "In the same app open Features → Access → Event Subscription, add a subscription with the Webhook URL above."
+  - "Authentication header: Basic, with the webhook user and password above."
+  - "Events: Meeting → Start Meeting, End Meeting, Participant/Host joined meeting, Participant/Host left meeting."
+  - "Copy the app's secret token into Webhook secret token below and save here first, then select Validate in Zoom."
+settings:
+  accountId:
+    label: Zoom account ID
+    required: true
+    hint: "Server-to-Server OAuth app → App credentials → Account ID."
+  login:
+    label: Client ID
+    required: true
+  password:
+    label: Client secret
+    type: secret
+    required: true
+  webhookSecretToken:
+    label: Webhook secret token
+    type: secret
+    required: true
+    hint: "Event Subscription → Secret Token. Zoom signs every webhook with it; unsigned requests are refused."
+  host:
+    label: Zoom API host
+    required: true
+    default: api.zoom.us
+    endpoint: true
+  includeRoomsMetrics:
+    label: Room metrics (status, camera, microphone)
+    type: bool
+    default: "true"
+    hint: "Uses Zoom's dashboard API; turn off to save its daily limit and rely on webhooks for meetings."
+  includeRoomDevices:
+    label: Room devices (controllers, scheduling displays)
+    type: bool
+    default: "false"
+  includeRoomDevicesInCalls:
+    label: Room devices follow the room's in-call status
+    type: bool
+    default: "false"
+    group: advanced
+  displayLiveMeetingDetails:
+    label: Live meeting details
+    type: bool
+    default: "false"
+    group: advanced
+  liveMeetingDetailsDailyRequestRateThreshold:
+    label: Daily limit for live meeting details requests
+    type: int
+    min: 0
+    group: advanced
+  zoomRoomLocations:
+    label: Only rooms in these locations
+    hint: "Comma-separated location names; empty = all rooms."
+    group: advanced
+  zoomRoomTypes:
+    label: Only these room types
+    hint: "Comma-separated; empty = all."
+    group: advanced
+  zoomOAuthHostname:
+    label: Zoom OAuth host
+    default: zoom.us
+    endpoint: true
+    group: advanced
