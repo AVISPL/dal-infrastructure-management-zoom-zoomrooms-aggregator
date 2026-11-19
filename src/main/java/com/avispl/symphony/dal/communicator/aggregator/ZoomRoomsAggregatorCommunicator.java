@@ -58,6 +58,8 @@ import com.avispl.symphony.api.dal.dto.monitor.aggregator.AggregatedDevice;
 import com.avispl.symphony.api.dal.error.CommandFailureException;
 import com.avispl.symphony.api.dal.monitor.Monitorable;
 import com.avispl.symphony.api.dal.monitor.aggregator.Aggregator;
+import com.avispl.symphony.api.dal.webhook.WebhookEnabled;
+import com.avispl.symphony.api.dal.webhook.WebhookEvent;
 import com.avispl.symphony.dal.aggregator.parser.AggregatedDeviceProcessor;
 import com.avispl.symphony.dal.aggregator.parser.PropertiesMapping;
 import com.avispl.symphony.dal.aggregator.parser.PropertiesMappingParser;
@@ -67,6 +69,7 @@ import com.avispl.symphony.dal.communicator.aggregator.properties.PropertyNameCo
 import com.avispl.symphony.dal.communicator.aggregator.settings.Setting;
 import com.avispl.symphony.dal.communicator.aggregator.settings.ZoomRoomsSetting;
 import com.avispl.symphony.dal.communicator.aggregator.status.RoomStatusProcessor;
+import com.avispl.symphony.dal.communicator.aggregator.webhook.ZoomWebhookEvent;
 import com.avispl.symphony.dal.util.StringUtils;
 
 /**
@@ -77,7 +80,7 @@ import com.avispl.symphony.dal.util.StringUtils;
  * @author Maksym.Rossiytsev
  * @since 1.0.0
  */
-public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements Aggregator, Monitorable, Controller {
+public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements Aggregator, Monitorable, Controller, WebhookEnabled {
 
     /**
      * Paginated response interface, needed to delegate paginated meetings to a caller
@@ -402,6 +405,29 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * Data is cached and retrieved every {@link #defaultMetaDataTimeout}
      */
     private ConcurrentHashMap<String, AggregatedDevice> aggregatedDevices = new ConcurrentHashMap<>();
+
+    // ---- webhooks (CTC phase 2; hosted by symphony-dal-cloud only)
+    /**
+     * In-call status reported by meeting webhook events, by room id. Wins over the room status from the metrics until a
+     * metrics retrieval at least {@link #WEBHOOK_OVERRIDE_SETTLE_MS} after the event shows the API has caught up.
+     */
+    private final ConcurrentHashMap<String, InCallOverride> webhookInCallOverrides = new ConcurrentHashMap<>();
+
+    /** Highest webhook sequence already folded in: redeliveries (at-least-once) are skipped. */
+    private volatile long lastDigestedSequence;
+
+    /** Time Zoom's metrics API is given to reflect a pushed meeting start / end before its data replaces the webhook's. */
+    static final long WEBHOOK_OVERRIDE_SETTLE_MS = 60_000L;
+
+    private static final class InCallOverride {
+        final boolean inCall;
+        final long at;
+
+        InCallOverride(boolean inCall, long at) {
+            this.inCall = inCall;
+            this.at = at;
+        }
+    }
 
     /**
      * Cached metrics data, retrieved from the resource-heavy API. Since daily request rate is limited - it must be cached
@@ -1496,6 +1522,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
 
             aggregatedDevices.clear();
             zoomRoomsMetricsData.clear();
+            webhookInCallOverrides.clear();
             validUserDetailsDataRetrievalPeriodTimestamps.clear();
             validRoomDevicesDataRetrievalPeriodTimestamps.clear();
             validRoomSettingsDataRetrievalPeriodTimestamps.clear();
@@ -1590,7 +1617,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             boolean callStatus = properties.containsKey(PropertyNameConstants.METRICS_ROOM_STATUS) && DeviceStatus.isInCall(properties.get(PropertyNameConstants.METRICS_ROOM_STATUS));
             try {
                 logDebugMessage(String.format("Updating %s device call status to %s", aggregatedDevice.getDeviceId(), callStatus));
-                setRoomInCall(aggregatedDevice, callStatus);
+                applyRoomInCall(aggregatedDevice, callStatus);
                 Boolean deviceOnline = aggregatedDevice.getDeviceOnline();
                 if (!deviceOnline) {
                     properties.put(PropertyNameConstants.METRICS_DATA_DEVICE_UPTIME, "ZR Offline");
@@ -1609,6 +1636,103 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         // Here for the same reason: the background collection keeps running, so it can clear the error once the API answers
         throwIfUnreachable();
         return new ArrayList<>(aggregatedDevices.values());
+    }
+
+    /**
+     * Folds Zoom meeting webhook events into the adapter's state; the next {@link #retrieveMultipleStatistics()} reports it.
+     * <ul>
+     * <li>meeting.started: the room's {@link EndpointStatistics#setInCall(Boolean) inCall} is {@code true} at once (no
+     * waiting for the metrics cooldown);</li>
+     * <li>meeting.ended: {@code inCall} is {@code false} at once.</li>
+     * </ul>
+     * The value holds until a metrics retrieval at least {@link #WEBHOOK_OVERRIDE_SETTLE_MS} after the event, from then on
+     * the metrics' room status is reported again. An event older than the room's current webhook value is skipped
+     * (out-of-order delivery), and redeliveries are skipped by sequence. An unparseable or unknown event is logged and
+     * skipped rather than thrown: it would never parse on redelivery either, and must not hold back the rest of the batch.
+     */
+    @Override
+    public void digest(List<WebhookEvent> events) throws Exception {
+        long highest = lastDigestedSequence;
+        for (WebhookEvent event : events) {
+            if (event.getSequence() <= lastDigestedSequence) {
+                continue; // already folded in (at-least-once redelivery)
+            }
+            highest = Math.max(highest, event.getSequence());
+            ZoomWebhookEvent parsed;
+            try {
+                parsed = ZoomWebhookEvent.parse(event.getBody());
+            } catch (IllegalArgumentException e) {
+                logger.warn(String.format("Webhook event %s skipped: %s", event.getSequence(), e.getMessage()));
+                continue;
+            }
+            long at = parsed.getOccurredAt() != null ? parsed.getOccurredAt().toEpochMilli()
+                    : event.getReceivedAt() != null ? event.getReceivedAt().getTime() : System.currentTimeMillis();
+            switch (parsed.getType()) {
+                case MEETING_STARTED:
+                    applyMeetingEvent(event.getSequence(), parsed, true, at);
+                    break;
+                case MEETING_ENDED:
+                    applyMeetingEvent(event.getSequence(), parsed, false, at);
+                    break;
+                case URL_VALIDATION:
+                    logger.warn(String.format("Webhook event %s is Zoom's endpoint.url_validation: it must be answered by the receiving service, skipped", event.getSequence()));
+                    break;
+                default:
+                    logger.info(String.format("Webhook event %s of type %s ignored", event.getSequence(), parsed.getRawType()));
+            }
+        }
+        lastDigestedSequence = highest;
+    }
+
+    private void applyMeetingEvent(long sequence, ZoomWebhookEvent event, boolean inCall, long at) {
+        String roomId = resolveRoomId(event);
+        if (roomId == null) {
+            logDebugMessage(String.format("Webhook event %s (meeting %s) is hosted by %s, not a monitored room's user, skipped", sequence, event.getMeetingId(), event.getHostId()));
+            return;
+        }
+        InCallOverride current = webhookInCallOverrides.get(roomId);
+        if (current != null && current.at > at) {
+            logger.info(String.format("Webhook event %s for room %s is older than the room's last event, skipped", sequence, roomId));
+            return;
+        }
+        webhookInCallOverrides.put(roomId, new InCallOverride(inCall, at));
+        AggregatedDevice room = aggregatedDevices.get(roomId);
+        if (room != null) {
+            setRoomInCall(room, inCall, true);
+        }
+        logger.info(String.format("Webhook event %s: room %s inCall=%s (meeting %s)", sequence, roomId, inCall, event.getMeetingId()));
+    }
+
+    /**
+     * Room id for an event: the room whose user id ({@link AggregatedDevice#getSerialNumber()}) is the meeting's host id;
+     * {@code null} if no monitored room hosts it.
+     */
+    private String resolveRoomId(ZoomWebhookEvent event) {
+        String hostId = event.getHostId();
+        if (hostId == null) {
+            return null;
+        }
+        for (Map.Entry<String, AggregatedDevice> entry : aggregatedDevices.entrySet()) {
+            if (!entry.getKey().startsWith(ROOM_DEVICE_ID_PREFIX) && hostId.equals(entry.getValue().getSerialNumber())) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Sets the room's inCall: the webhook value if one is in effect for the room, else {@code metricsInCall}.
+     *
+     * @param room cached room
+     * @param metricsInCall in-call status according to the room status from the metrics
+     */
+    private void applyRoomInCall(AggregatedDevice room, boolean metricsInCall) {
+        InCallOverride override = webhookInCallOverrides.get(room.getDeviceId());
+        if (override != null) {
+            setRoomInCall(room, override.inCall, true);
+        } else {
+            setRoomInCall(room, metricsInCall);
+        }
     }
 
     /**
@@ -1644,6 +1768,7 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         aggregatedDevices.keySet().removeIf(deviceId -> !retrievedRoomIds.contains(deviceId));
         // Room errors are keyed by room id: drop the ones of rooms that are gone
         knownErrors.keySet().removeIf(key -> !GLOBAL_ERROR_KEYS.contains(key) && !aggregatedDevices.containsKey(key));
+        webhookInCallOverrides.keySet().removeIf(roomId -> !aggregatedDevices.containsKey(roomId));
         nextDevicesCollectionIterationTimestamp = System.currentTimeMillis();
 
         knownErrors.remove(PropertyNameConstants.ROOMS_LIST_RETRIEVAL_ERROR_KEY);
@@ -2140,10 +2265,10 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
         if (properties.containsKey(PropertyNameConstants.METRICS_ROOM_STATUS) && properties.get(PropertyNameConstants.METRICS_ROOM_STATUS).equals("InMeeting")) {
             collectRoomGroup(roomId, "LiveMeeting", failedGroups, () -> retrieveZoomRoomMetricsDetails(roomId, properties),
                     () -> validLiveMeetingsDataRetrievalPeriodTimestamps.remove(roomId));
-            setRoomInCall(aggregatedZoomRoomDevice, true);
+            applyRoomInCall(aggregatedZoomRoomDevice, true);
         } else {
             cleanupStaleProperties(properties, PropertyNameConstants.LIVE_MEETING_GROUP);
-            setRoomInCall(aggregatedZoomRoomDevice, false);
+            applyRoomInCall(aggregatedZoomRoomDevice, false);
         }
 
         if (!excludePropertyGroups.contains("RoomUserDetails")) {
@@ -2206,8 +2331,20 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
      * @param aggregatedZoomRoomDevice device to change inCall status for
      * @param inCall whether the device is in call or not
      * */
-    private synchronized void setRoomInCall(AggregatedDevice aggregatedZoomRoomDevice, boolean inCall) {
-        if (!includeRoomsMetrics) {
+    private void setRoomInCall(AggregatedDevice aggregatedZoomRoomDevice, boolean inCall) {
+        setRoomInCall(aggregatedZoomRoomDevice, inCall, false);
+    }
+
+    /**
+     * Set zoom room in call status
+     *
+     * @param aggregatedZoomRoomDevice device to change inCall status for
+     * @param inCall whether the device is in call or not
+     * @param fromWebhook the status comes from a webhook event: set even when {@link #includeRoomsMetrics} is off, since
+     *                    it doesn't depend on the metrics
+     * */
+    private synchronized void setRoomInCall(AggregatedDevice aggregatedZoomRoomDevice, boolean inCall, boolean fromWebhook) {
+        if (!includeRoomsMetrics && !fromWebhook) {
             logDebugMessage("includeRoomsMetrics configuration parameter is set to 'false', skipping Zoom Room inCall status update.");
             return;
         }
@@ -2540,6 +2677,8 @@ public class ZoomRoomsAggregatorCommunicator extends RestCommunicator implements
             });
 
             logDebugMessage("Updated ZoomRooms metrics entries: " + zoomRoomsMetricsData);
+            // The metrics have had time to reflect the webhook-reported meeting starts / ends: their room status applies again
+            webhookInCallOverrides.values().removeIf(o -> currentTimestamp - o.at >= WEBHOOK_OVERRIDE_SETTLE_MS);
         } catch (CommandFailureException ex) {
             if (ex.getStatusCode() == 429) {
                 logger.warn(String.format("Rate limit for %s API was reached, cached metrics are kept.", ZOOM_ROOMS_METRICS_URL), ex);
