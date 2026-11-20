@@ -96,7 +96,7 @@
             <artifactId>symphony-api-dal</artifactId>
             <version>${symphonyApiVersion}</version>
             <scope>system</scope>
-            <systemPath>${basedir}/lib/symphony-api-dal-6.5.0-CTC-SNAPSHOT.jar</systemPath>
+            <systemPath>${basedir}/lib/symphony-api-dal-6.4.0-cloud-SNAPSHOT.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>com.avispl.symphony.dal</groupId>

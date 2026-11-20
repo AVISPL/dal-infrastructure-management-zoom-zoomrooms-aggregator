@@ -133,6 +133,70 @@ public class ZoomRoomsWebhookTest {
     }
 
     @Test
+    public void digest_shouldSetInCall_whenRoomUserJoinsAnotherHostsMeeting() throws Exception {
+        communicator.digest(Collections.singletonList(participant(1, "meeting.participant_joined", "m42", "someHost", ROOM_USER_ID, System.currentTimeMillis())));
+
+        Assertions.assertEquals(Boolean.TRUE, inCall());
+    }
+
+    @Test
+    public void digest_shouldClearInCall_whenRoomUserLeaves() throws Exception {
+        long now = System.currentTimeMillis();
+        communicator.digest(Arrays.asList(participant(1, "meeting.participant_joined", "m42", "someHost", ROOM_USER_ID, now - 1000),
+                participant(2, "meeting.participant_left", "m42", "someHost", ROOM_USER_ID, now)));
+
+        Assertions.assertEquals(Boolean.FALSE, inCall());
+    }
+
+    @Test
+    public void digest_shouldClearInCall_whenJoinedMeetingEnds() throws Exception {
+        long now = System.currentTimeMillis();
+        communicator.digest(Arrays.asList(participant(1, "meeting.participant_joined", "m42", "someHost", ROOM_USER_ID, now - 1000),
+                meeting(2, "meeting.ended", "m42", "someHost", now)));
+
+        Assertions.assertEquals(Boolean.FALSE, inCall());
+    }
+
+    @Test
+    public void digest_shouldKeepInCall_whenAnotherMeetingEnds() throws Exception {
+        long now = System.currentTimeMillis();
+        communicator.digest(Arrays.asList(participant(1, "meeting.participant_joined", "m42", "someHost", ROOM_USER_ID, now - 1000),
+                meeting(2, "meeting.ended", "m77", "someHost", now)));
+
+        Assertions.assertEquals(Boolean.TRUE, inCall());
+    }
+
+    @Test
+    public void digest_shouldIgnoreParticipant_whenUserIsNoRoom() throws Exception {
+        communicator.digest(Collections.singletonList(participant(1, "meeting.participant_joined", "m42", "someHost", "aPerson", System.currentTimeMillis())));
+
+        Assertions.assertNull(room.getMonitoredStatistics(), "participants are matched against room user ids only");
+    }
+
+    @Test
+    public void digest_shouldMatchParticipantById_whenParticipantUserIdIsAbsent() throws Exception {
+        String body = "{\"event\":\"meeting.participant_joined\",\"event_ts\":" + System.currentTimeMillis() + ",\"payload\":{\"object\":"
+                + "{\"id\":\"m42\",\"host_id\":\"someHost\",\"participant\":{\"id\":\"" + ROOM_USER_ID + "\",\"user_name\":\"Board Room\"}}}}";
+
+        communicator.digest(Collections.singletonList(new WebhookEvent(1, new Date(), body)));
+
+        Assertions.assertEquals(Boolean.TRUE, inCall());
+    }
+
+    private static WebhookEvent participant(long sequence, String type, String meetingId, String hostId, String participantUserId, long eventTs) {
+        String body = "{\"event\":\"" + type + "\",\"event_ts\":" + eventTs + ",\"payload\":{\"object\":{\"id\":\"" + meetingId
+                + "\",\"host_id\":\"" + hostId + "\",\"participant\":{\"participant_user_id\":\"" + participantUserId
+                + "\",\"user_name\":\"someone\"}}}}";
+        return new WebhookEvent(sequence, new Date(), body);
+    }
+
+    private static WebhookEvent meeting(long sequence, String type, String meetingId, String hostId, long eventTs) {
+        String body = "{\"event\":\"" + type + "\",\"event_ts\":" + eventTs + ",\"payload\":{\"object\":{\"id\":\"" + meetingId
+                + "\",\"host_id\":\"" + hostId + "\"}}}";
+        return new WebhookEvent(sequence, new Date(), body);
+    }
+
+    @Test
     public void parsesDocumentedPayload() {
         ZoomWebhookEvent parsed = ZoomWebhookEvent.parse(DOCUMENTED_STARTED);
         Assertions.assertEquals(ZoomWebhookEvent.Type.MEETING_STARTED, parsed.getType());

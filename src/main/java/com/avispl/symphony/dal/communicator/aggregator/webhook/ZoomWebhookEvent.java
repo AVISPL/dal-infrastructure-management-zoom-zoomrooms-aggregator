@@ -31,7 +31,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public final class ZoomWebhookEvent {
 
     public enum Type {
-        MEETING_STARTED, MEETING_ENDED, URL_VALIDATION, UNKNOWN
+        MEETING_STARTED, MEETING_ENDED, PARTICIPANT_JOINED, PARTICIPANT_LEFT, URL_VALIDATION, UNKNOWN
     }
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -41,14 +41,17 @@ public final class ZoomWebhookEvent {
     /** {@code object.host_id}: the meeting host's user id, or {@code null} */
     private final String hostId;
     private final String meetingId;
+    /** {@code object.participant}'s user id for participant events, or {@code null} */
+    private final String participantUserId;
     /** vendor event time, or {@code null} when absent / unparseable */
     private final Instant occurredAt;
 
-    private ZoomWebhookEvent(Type type, String rawType, String hostId, String meetingId, Instant occurredAt) {
+    private ZoomWebhookEvent(Type type, String rawType, String hostId, String meetingId, String participantUserId, Instant occurredAt) {
         this.type = type;
         this.rawType = rawType;
         this.hostId = hostId;
         this.meetingId = meetingId;
+        this.participantUserId = participantUserId;
         this.occurredAt = occurredAt;
     }
 
@@ -73,6 +76,10 @@ public final class ZoomWebhookEvent {
             type = Type.MEETING_STARTED;
         } else if ("meeting.ended".equals(rawType)) {
             type = Type.MEETING_ENDED;
+        } else if ("meeting.participant_joined".equals(rawType)) {
+            type = Type.PARTICIPANT_JOINED;
+        } else if ("meeting.participant_left".equals(rawType)) {
+            type = Type.PARTICIPANT_LEFT;
         } else if ("endpoint.url_validation".equals(rawType)) {
             type = Type.URL_VALIDATION;
         } else {
@@ -88,7 +95,13 @@ public final class ZoomWebhookEvent {
         if (occurredAt == null) {
             occurredAt = instant(text(object, type == Type.MEETING_ENDED ? "end_time" : "start_time"));
         }
-        return new ZoomWebhookEvent(type, rawType, text(object, "host_id"), text(object, "id"), occurredAt);
+        JsonNode participant = object.path("participant");
+        // shortcut: participant_user_id, else id, per Zoom's docs; confirm against a live event which one carries the room's user id
+        String participantUserId = text(participant, "participant_user_id");
+        if (participantUserId == null || participantUserId.isEmpty()) {
+            participantUserId = text(participant, "id");
+        }
+        return new ZoomWebhookEvent(type, rawType, text(object, "host_id"), text(object, "id"), participantUserId, occurredAt);
     }
 
     private static String text(JsonNode node, String field) {
@@ -121,6 +134,10 @@ public final class ZoomWebhookEvent {
 
     public String getMeetingId() {
         return meetingId;
+    }
+
+    public String getParticipantUserId() {
+        return participantUserId;
     }
 
     public Instant getOccurredAt() {
