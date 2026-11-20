@@ -48,6 +48,17 @@ public class ZoomCloudDescriptorTest {
         Assertions.assertTrue(descriptor.path("setup-steps").size() > 0);
     }
 
+    @Test
+    public void descriptor_shouldRequireHttpsOn443_whenTheHostCreatesTheAdapter() throws Exception {
+        JsonNode settings = load().path("settings");
+
+        // the adapter defaults to http, and Zoom answers a POST to http://zoom.us/oauth/token with a redirect that ends in 405
+        Assertions.assertTrue(settings.path("protocol").path("required").asBoolean());
+        Assertions.assertEquals("https", settings.path("protocol").path("default").asText());
+        Assertions.assertTrue(settings.path("port").path("required").asBoolean());
+        Assertions.assertEquals("443", settings.path("port").path("default").asText());
+    }
+
     private static JsonNode load() throws Exception {
         try (InputStream in = ZoomCloudDescriptorTest.class.getResourceAsStream(DESCRIPTOR)) {
             Assertions.assertNotNull(in, DESCRIPTOR + " missing");

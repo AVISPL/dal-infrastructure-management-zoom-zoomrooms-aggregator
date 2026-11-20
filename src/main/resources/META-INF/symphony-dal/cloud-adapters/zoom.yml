@@ -31,6 +31,23 @@ settings:
     required: true
     default: api.zoom.us
     endpoint: true
+  protocol:
+    label: Protocol
+    type: enum
+    options: [https, http]
+    required: true
+    default: https
+    endpoint: true
+    group: advanced
+  port:
+    label: Port
+    type: int
+    min: 1
+    max: 65535
+    required: true
+    default: "443"
+    endpoint: true
+    group: advanced
   includeRoomsMetrics:
     label: Room metrics (status, camera, microphone)
     type: bool
